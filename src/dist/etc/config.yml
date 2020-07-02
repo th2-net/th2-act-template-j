@@ -1,0 +1,15 @@
+#port: 8080
+#th2FIXConnectivitySendMQ:
+#th2FIXConnectivityInMQ:
+#th2
+#    rabbitMQExchangeNameTH2Connectivity:
+#    th2VerifierGRPCHost:
+#    th2VerifierGRPCPort:
+#    th2EventStorageGRPCHost:
+#    th2EventStorageGRPCPort:
+#rabbitMQ:
+#    host: rabbitmq
+#    virtualHost: th2
+#    port: 5672
+#    username:
+#    password:
