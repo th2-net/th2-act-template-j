@@ -1,12 +1,9 @@
 /*
  * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,11 +13,10 @@
 package com.exactpro.th2.act;
 
 import static com.datastax.driver.core.utils.UUIDs.timeBased;
-import static com.exactpro.th2.common.event.Event.Status.*;
+import static com.exactpro.th2.common.event.Event.Status.PASSED;
 import static com.exactpro.th2.infra.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.infra.grpc.RequestStatus.Status.SUCCESS;
 import static com.google.protobuf.TextFormat.shortDebugString;
-import static io.grpc.ManagedChannelBuilder.forAddress;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
@@ -30,26 +26,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.RabbitMqMessageSender;
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.common.event.Event.Status;
-import com.exactpro.th2.configuration.MicroserviceConfiguration;
-import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.configuration.Th2Configuration;
-import com.exactpro.th2.configuration.Th2Configuration.QueueNames;
-import com.exactpro.th2.eventstore.grpc.EventStoreServiceGrpc;
-import com.exactpro.th2.eventstore.grpc.EventStoreServiceGrpc.EventStoreServiceBlockingStub;
+import com.exactpro.th2.eventstore.grpc.EventStoreServiceService;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
 import com.exactpro.th2.infra.grpc.Checkpoint;
 import com.exactpro.th2.infra.grpc.Event;
@@ -57,13 +45,15 @@ import com.exactpro.th2.infra.grpc.EventID;
 import com.exactpro.th2.infra.grpc.EventStatus;
 import com.exactpro.th2.infra.grpc.ListValueOrBuilder;
 import com.exactpro.th2.infra.grpc.Message;
+import com.exactpro.th2.infra.grpc.MessageBatch;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.RequestStatus;
 import com.exactpro.th2.infra.grpc.Value;
+import com.exactpro.th2.schema.grpc.router.GrpcRouter;
+import com.exactpro.th2.schema.message.MessageRouter;
 import com.exactpro.th2.verifier.grpc.CheckpointRequest;
 import com.exactpro.th2.verifier.grpc.CheckpointResponse;
-import com.exactpro.th2.verifier.grpc.VerifierGrpc;
-import com.exactpro.th2.verifier.grpc.VerifierGrpc.VerifierBlockingStub;
+import com.exactpro.th2.verifier.grpc.VerifierService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
@@ -72,27 +62,20 @@ import com.google.protobuf.Timestamp;
 
 import io.grpc.Context;
 import io.grpc.Deadline;
-import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
-    private final Map<String, ConnectivityContext> connectivityIdToContext = new HashMap<>();
-    private final ManagedChannel verifierChannel;
-    private final ManagedChannel eventChannel;
-    private final VerifierBlockingStub verifierConnector;
-    private final EventStoreServiceBlockingStub eventStoreConnector;
-    private final RabbitMQConfiguration rabbitMQconfiguration;
 
-    ActHandler(MicroserviceConfiguration configuration) {
-        Th2Configuration th2Configuration = configuration.getTh2();
-        this.rabbitMQconfiguration = configuration.getRabbitMQ();
-        this.verifierChannel = forAddress(th2Configuration.getTh2VerifierGRPCHost(), th2Configuration.getTh2VerifierGRPCPort()).usePlaintext().build();
-        this.verifierConnector = VerifierGrpc.newBlockingStub(verifierChannel);
-        this.eventChannel = forAddress(th2Configuration.getTh2EventStorageGRPCHost(), th2Configuration.getTh2EventStorageGRPCPort()).usePlaintext().build();
-        this.eventStoreConnector = EventStoreServiceGrpc.newBlockingStub(eventChannel);
-        createConnectivityContexts(configuration);
+    private final VerifierService verifierConnector;
+    private final EventStoreServiceService eventStoreConnector;
+    private final MessageRouter<MessageBatch> messageRouter;
+
+    ActHandler(GrpcRouter grpcRouter, MessageRouter<MessageBatch> router) throws ClassNotFoundException {
+        this.messageRouter = router;
+        this.verifierConnector = grpcRouter.getService(VerifierService.class);
+        this.eventStoreConnector = grpcRouter.getService(EventStoreServiceService.class);
     }
 
     @Override
@@ -115,8 +98,6 @@ public class ActHandler extends ActImplBase {
         try {
             if(logger.isDebugEnabled()) { logger.debug("Send message request: " + shortDebugString(request)); }
 
-            ConnectivityContext connectivityContext = getConnectivityContext(request);
-
             String actName = "sendMessage";
             // FIXME store parent with fail in case of children fail
             StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
@@ -129,7 +110,7 @@ public class ActHandler extends ActImplBase {
                 sendMessageErrorResponse(responseObserver, "Cancelled by client");
             }
 
-            sendMessage(request, connectivityContext.getMessageSender(), parentId);
+            sendMessage(request, parentId);
 
             SendMessageResponse response = SendMessageResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
@@ -222,21 +203,16 @@ public class ActHandler extends ActImplBase {
 
         CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
 
-        ConnectivityContext connectivityContext = getConnectivityContext(request);
-
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
         EventID parentId = storeEventRequest.getEvent().getId();
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
-        QueueNames queueNames = connectivityContext.getQueueNames();
-        try (MessageReceiver messageReceiver = new MessageReceiver(rabbitMQconfiguration,
-                "Act:place message",
-                queueNames.getExchangeName(),
-                queueNames.getInQueueName(),
-                checkRule)) {
-            if (isSendPlaceMessage(request, responseObserver, connectivityContext.getMessageSender(), parentId)) {
+
+
+        try (MessageReceiver messageReceiver = new MessageReceiver(messageRouter, checkRule)) {
+            if (isSendPlaceMessage(request, responseObserver, null, parentId)) {
 
                 long startAwaitSync = System.currentTimeMillis();
                 messageReceiver.awaitSync(getTimeout(Context.current().getDeadline()), MILLISECONDS);
@@ -249,7 +225,7 @@ public class ActHandler extends ActImplBase {
                     processResponseMessage(responseObserver, checkpoint, messageReceiver.getResponseMessage());
                 }
             }
-        } catch (RuntimeException | TimeoutException | IOException | InterruptedException e) {
+        } catch (RuntimeException | InterruptedException e) {
             logger.error("'{}' internal error: {}", actName, e.getMessage(), e);
             sendErrorResponse(responseObserver, "InternalError: " + e.getMessage());
         }
@@ -280,47 +256,16 @@ public class ActHandler extends ActImplBase {
         return storeEventRequest;
     }
 
-    @NotNull
-    private ConnectivityContext getConnectivityContext(PlaceMessageRequestOrBuilder request) {
-        long startTime = System.currentTimeMillis();
-
-        String connectivityId = request.getConnectionId().getSessionAlias();
-        ConnectivityContext connectivityContext = connectivityIdToContext.get(connectivityId);
-        if (connectivityContext == null) {
-            throw new IllegalArgumentException("Unknown connectivityId '" + connectivityId + '\'');
-        }
-        logger.debug("getConnectivityContext in {} ms", System.currentTimeMillis() - startTime);
-        return connectivityContext;
-    }
-
     void close() {
-        if (verifierChannel != null) {
-            verifierChannel.shutdownNow();
-        }
-        if (eventChannel != null) {
-            eventChannel.shutdownNow();
-        }
-        connectivityIdToContext.values().forEach(context -> {
+        if (messageRouter != null) {
             try {
-                context.getMessageSender().close();
+                messageRouter.unsubscribeAll();
             } catch (IOException e) {
-                logger.error("Could not close message sender", e);
+                logger.error("Can not unsubscribe from all queues in message router");
             }
-        });
+        }
     }
 
-    private void createConnectivityContexts(MicroserviceConfiguration configuration) {
-        configuration.getTh2().getConnectivityQueueNames().forEach((connectivityId, queueNames) -> {
-            try {
-                logger.debug("id '{}': queueNames {}", connectivityId, queueNames);
-                RabbitMqMessageSender messageSender = new RabbitMqMessageSender(configuration.getRabbitMQ(),
-                        connectivityId, queueNames.getExchangeName(), queueNames.getToSendQueueName());
-                connectivityIdToContext.put(connectivityId, new ConnectivityContext(messageSender, queueNames));
-            } catch (RuntimeException e) {
-                logger.error("Could not create rabbit mq message sender to '{}' connectivity", connectivityId, e);
-            }
-        });
-    }
 
     private void processResponseMessage(StreamObserver<PlaceMessageResponse> responseObserver, Checkpoint checkpoint,
             Message responseMessage) {
@@ -342,11 +287,11 @@ public class ActHandler extends ActImplBase {
     }
 
     private boolean isSendPlaceMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-            RabbitMqMessageSender messageSender, EventID parentEventId) {
+            MessageRouter<MessageBatch> router, EventID parentEventId) {
         long startTime = System.currentTimeMillis();
 
         try {
-            sendMessage(request, messageSender, parentEventId);
+            sendMessage(request, parentEventId);
             return true;
         } catch (IOException e) {
             logger.error("Could not send message to queue", e);
@@ -357,14 +302,20 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private void sendMessage(PlaceMessageRequest request,
-            RabbitMqMessageSender messageSender, EventID parentEventId) throws IOException {
+    private void sendMessage(PlaceMessageRequest request, EventID parentEventId) throws IOException {
         try {
             logger.debug("Send message start");
             Timestamp start = getTimestamp(Instant.now());
-            messageSender.send(Message.newBuilder(request.getMessage())
+
+            //May be use in future for filtering
+            //request.getConnectionId().getSessionAlias();
+
+            messageRouter.send(MessageBatch
+                    .newBuilder()
+                    .addMessages(Message
+                            .newBuilder(request.getMessage())
                     .setParentEventId(parentEventId)
-                    .build());
+                    .build()).build());
             Timestamp end = getTimestamp(Instant.now());
             //TODO remove after solving issue TH2-217
             StoreEventRequest sendMessageEvent = createSendMessageEvent(request, start, end, parentEventId);
@@ -475,23 +426,5 @@ public class ActHandler extends ActImplBase {
 
     private static EventID newEventId() {
         return EventID.newBuilder().setId(timeBased().toString()).build();
-    }
-
-    private static class ConnectivityContext {
-        private final RabbitMqMessageSender messageSender;
-        private final QueueNames queueNames;
-
-        public ConnectivityContext(RabbitMqMessageSender messageSender, QueueNames queueNames) {
-            this.messageSender = messageSender;
-            this.queueNames = queueNames;
-        }
-
-        public RabbitMqMessageSender getMessageSender() {
-            return messageSender;
-        }
-
-        public QueueNames getQueueNames() {
-            return queueNames;
-        }
     }
 }
