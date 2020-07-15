@@ -21,9 +21,13 @@ import static com.exactpro.th2.infra.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.infra.grpc.RequestStatus.Status.SUCCESS;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static io.grpc.ManagedChannelBuilder.forAddress;
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.*;
+import static java.time.Instant.ofEpochMilli;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +37,7 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.eventstore.grpc.Response;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -219,42 +224,49 @@ public class ActHandler extends ActImplBase {
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
             String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
         long startPlaceMessage = System.currentTimeMillis();
+        EventID parentId = request.getParentEventId();
+        try {
+            CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
 
-        CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
+            ConnectivityContext connectivityContext = getConnectivityContext(request);
 
-        ConnectivityContext connectivityContext = getConnectivityContext(request);
+            // FIXME store parent with fail in case of children fail
+            StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
+            parentId = storeEventRequest.getEvent().getId();
 
-        // FIXME store parent with fail in case of children fail
-        StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
-        EventID parentId = storeEventRequest.getEvent().getId();
+            Checkpoint checkpoint = registerCheckPoint(parentId);
 
-        Checkpoint checkpoint = registerCheckPoint(parentId);
+            QueueNames queueNames = connectivityContext.getQueueNames();
+            try (MessageReceiver messageReceiver = new MessageReceiver(rabbitMQconfiguration,
+                    "Act:place message",
+                    queueNames.getExchangeName(),
+                    queueNames.getInQueueName(),
+                    checkRule)) {
+                if (isSendPlaceMessage(request, responseObserver, connectivityContext.getMessageSender(), parentId)) {
 
-        QueueNames queueNames = connectivityContext.getQueueNames();
-        try (MessageReceiver messageReceiver = new MessageReceiver(rabbitMQconfiguration,
-                "Act:place message",
-                queueNames.getExchangeName(),
-                queueNames.getInQueueName(),
-                checkRule)) {
-            if (isSendPlaceMessage(request, responseObserver, connectivityContext.getMessageSender(), parentId)) {
+                    long startAwaitSync = System.currentTimeMillis();
+                    messageReceiver.awaitSync(getTimeout(Context.current().getDeadline()), MILLISECONDS);
+                    logger.debug("messageReceiver.awaitSync for {} in {} ms", actName, System.currentTimeMillis() - startAwaitSync);
 
-                long startAwaitSync = System.currentTimeMillis();
-                messageReceiver.awaitSync(getTimeout(Context.current().getDeadline()), MILLISECONDS);
-                logger.debug("messageReceiver.awaitSync for {} in {} ms", actName, System.currentTimeMillis() - startAwaitSync);
-
-                if (Context.current().isCancelled()) {
-                    logger.warn("'{}' request cancelled by client", actName);
-                    sendErrorResponse(responseObserver, "Cancelled by client");
-                } else {
-                    processResponseMessage(responseObserver, checkpoint, messageReceiver.getResponseMessage());
+                    if (Context.current().isCancelled()) {
+                        logger.warn("'{}' request cancelled by client", actName);
+                        sendErrorResponse(responseObserver, "Cancelled by client");
+                    } else {
+                        processResponseMessage(responseObserver, checkpoint, messageReceiver.getResponseMessage());
+                    }
                 }
             }
         } catch (RuntimeException | TimeoutException | IOException | InterruptedException e) {
             logger.error("'{}' internal error: {}", actName, e.getMessage(), e);
+            createAndStoreErrorEvent(actName,
+                    e.getMessage(),
+                    getTimestamp(ofEpochMilli(startPlaceMessage)),
+                    getTimestamp(Instant.now()),
+                    parentId);
             sendErrorResponse(responseObserver, "InternalError: " + e.getMessage());
+        } finally {
+            logger.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
         }
-
-        logger.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
     }
 
     private static long getTimeout(Deadline deadline) {
@@ -397,6 +409,33 @@ public class ActHandler extends ActImplBase {
                 .setBody(convertMessageToEvent(request))
                         .build())
                 .build();
+    }
+
+
+
+    private void createAndStoreErrorEvent(String actName, String message,
+                                               Timestamp start,
+                                               Timestamp end,
+                                               EventID parentEventId) {
+        try {
+            StoreEventRequest errorEvent = StoreEventRequest.newBuilder()
+                    .setEvent(Event.newBuilder().setId(newEventId())
+                            .setParentId(parentEventId)
+                            .setName(format("Internal %s error", actName))
+                            .setType("Error")
+                            .setStartTimestamp(start)
+                            .setEndTimestamp(end)
+                            .setStatus(EventStatus.FAILED)
+                            .setBody(ByteString.copyFrom(format("{\"message\": \"%s\"}", message), UTF_8))
+                            .build())
+                    .build();
+            Response response = eventStoreConnector.storeEvent(errorEvent);
+            if (response.hasError()) {
+                logger.error("could not store error event: {}", response.getError());
+            }
+        } catch (Exception e) {
+            logger.error("could not store error event", e);
+        }
     }
 
     private ByteString convertMessageToEvent(PlaceMessageRequestOrBuilder request) {
