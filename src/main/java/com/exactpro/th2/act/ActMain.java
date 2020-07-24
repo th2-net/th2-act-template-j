@@ -55,7 +55,7 @@ public class ActMain {
             }
 
             GrpcRouter grpcRouter = factory.getGrpcRouter();
-            MessageRouter<MessageBatch> messageRouterParsedBatch = factory.getMessageRouterParsedBatch();
+            MessageRouter<MessageBatch> messageRouterParsedBatch = (MessageRouter<MessageBatch>) factory.getMessageRouterParsedBatch();
 
             ActHandler actHandler = new ActHandler(grpcRouter, messageRouterParsedBatch);
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
