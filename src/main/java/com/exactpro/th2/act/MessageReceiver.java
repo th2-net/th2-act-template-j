@@ -27,6 +27,8 @@ import com.exactpro.th2.schema.message.MessageRouter;
 import com.exactpro.th2.schema.message.SubscriberMonitor;
 
 public class MessageReceiver implements AutoCloseable {
+    public static final String IN_ATTRIBUTE_NAME = "in";
+    public static final String OE_ATTRIBUTE_NAME = "oe";
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
     private final SubscriberMonitor subscriberMonitor;
     private final CheckRule checkRule;
@@ -37,7 +39,7 @@ public class MessageReceiver implements AutoCloseable {
     public MessageReceiver(MessageRouter<MessageBatch> router, CheckRule checkRule) {
         long startTime = System.currentTimeMillis();
 
-        subscriberMonitor = router.subscribeAll(this::processIncomingMessages);
+        subscriberMonitor = router.subscribeAll(this::processIncomingMessages, IN_ATTRIBUTE_NAME, OE_ATTRIBUTE_NAME);
         this.checkRule = checkRule;
         //logger.info("Receiver is created with MQ configuration, queue name '{}' during '{}'", messageQueue,  System.currentTimeMillis() - startTime);
 

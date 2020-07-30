@@ -201,15 +201,16 @@ public class ActHandler extends ActImplBase {
             String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
         long startPlaceMessage = System.currentTimeMillis();
 
-        CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
+        CheckRule checkRule = new FixCheckRule(expectedFieldName,
+                expectedFieldValue,
+                expectedMessageTypes,
+                request.getMessage());
 
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
         EventID parentId = storeEventRequest.getEvent().getId();
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
-
-
 
         try (MessageReceiver messageReceiver = new MessageReceiver(messageRouter, checkRule)) {
             if (isSendPlaceMessage(request, responseObserver, null, parentId)) {

@@ -26,25 +26,29 @@ import org.slf4j.LoggerFactory;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.google.protobuf.TextFormat.*;
+
 public class FixCheckRule implements CheckRule {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
     private final String expectedFieldName;
     private final String expectedFieldValue;
     private final Set<String> expectedMessageTypes;
+    private final Message requestMessage;
 
     private final AtomicReference<Message> response = new AtomicReference<>();
 
-    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes) {
+    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, Message requestMessage) {
         this.expectedFieldName = expectedFieldName;
         this.expectedFieldValue = expectedFieldValue;
         this.expectedMessageTypes = expectedMessageTypes;
+        this.requestMessage = requestMessage;
     }
 
     @Override
     public boolean onMessage(Message message) {
         String messageType = message.getMetadata().getMessageType();
-        if (expectedMessageTypes.contains(messageType)) {
-            if(logger.isDebugEnabled()) { logger.debug("check the message: " + TextFormat.shortDebugString(message)); }
+        if (checkSessionAlias(message) && expectedMessageTypes.contains(messageType)) {
+            if(logger.isDebugEnabled()) { logger.debug("check the message: {}", shortDebugString(message)); }
             if (checkExpectedField(message)) {
                 response.set(message);
                 logger.debug("FixCheckRule passed on {} messageType", messageType);
@@ -62,5 +66,11 @@ public class FixCheckRule implements CheckRule {
     private boolean checkExpectedField(MessageOrBuilder message) {
         Value value = message.getFieldsMap().get(expectedFieldName);
         return value != null && expectedFieldValue.equals(value.getSimpleValue());
+    }
+
+    private boolean checkSessionAlias(Message message) {
+        String requestSessionAlias = requestMessage.getMetadata().getId().getConnectionId().getSessionAlias();
+        String actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
+        return requestSessionAlias.equals(actualSessionAlias);
     }
 }
