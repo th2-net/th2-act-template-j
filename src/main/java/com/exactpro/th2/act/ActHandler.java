@@ -38,6 +38,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import com.exactpro.th2.eventstore.grpc.Response;
+import com.exactpro.th2.infra.grpc.*;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,15 +59,6 @@ import com.exactpro.th2.configuration.Th2Configuration.QueueNames;
 import com.exactpro.th2.eventstore.grpc.EventStoreServiceGrpc;
 import com.exactpro.th2.eventstore.grpc.EventStoreServiceGrpc.EventStoreServiceBlockingStub;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
-import com.exactpro.th2.infra.grpc.Checkpoint;
-import com.exactpro.th2.infra.grpc.Event;
-import com.exactpro.th2.infra.grpc.EventID;
-import com.exactpro.th2.infra.grpc.EventStatus;
-import com.exactpro.th2.infra.grpc.ListValueOrBuilder;
-import com.exactpro.th2.infra.grpc.Message;
-import com.exactpro.th2.infra.grpc.MessageOrBuilder;
-import com.exactpro.th2.infra.grpc.RequestStatus;
-import com.exactpro.th2.infra.grpc.Value;
 import com.exactpro.th2.verifier.grpc.CheckpointRequest;
 import com.exactpro.th2.verifier.grpc.CheckpointResponse;
 import com.exactpro.th2.verifier.grpc.VerifierGrpc;
@@ -243,16 +237,21 @@ public class ActHandler extends ActImplBase {
                     queueNames.getInQueueName(),
                     checkRule)) {
                 if (isSendPlaceMessage(request, responseObserver, connectivityContext.getMessageSender(), parentId)) {
-
                     long startAwaitSync = System.currentTimeMillis();
-                    messageReceiver.awaitSync(getTimeout(Context.current().getDeadline()), MILLISECONDS);
-                    logger.debug("messageReceiver.awaitSync for {} in {} ms", actName, System.currentTimeMillis() - startAwaitSync);
-
+                    long timeout = getTimeout(Context.current().getDeadline());
+                    messageReceiver.awaitSync(timeout, MILLISECONDS);
+                    logger.debug("messageReceiver.awaitSync for {} in {} ms",
+                            actName, System.currentTimeMillis() - startAwaitSync);
                     if (Context.current().isCancelled()) {
                         logger.warn("'{}' request cancelled by client", actName);
                         sendErrorResponse(responseObserver, "Cancelled by client");
                     } else {
-                        processResponseMessage(responseObserver, checkpoint, messageReceiver.getResponseMessage());
+                        processResponseMessage(actName,
+                                responseObserver,
+                                checkpoint,
+                                parentId,
+                                messageReceiver.getResponseMessage(),
+                                timeout);
                     }
                 }
             }
@@ -334,22 +333,41 @@ public class ActHandler extends ActImplBase {
         });
     }
 
-    private void processResponseMessage(StreamObserver<PlaceMessageResponse> responseObserver, Checkpoint checkpoint,
-            Message responseMessage) {
+    private void processResponseMessage(String actName,
+                                        StreamObserver<PlaceMessageResponse> responseObserver,
+                                        Checkpoint checkpoint,
+                                        EventID parentEventId,
+                                        Message responseMessage,
+                                        long timeout) {
         long startTime = System.currentTimeMillis();
-
+        String message = format("No response message received during '%s' ms", timeout);
         if (responseMessage == null) {
-            sendErrorResponse(responseObserver, "No response message received");
-            return;
+            createAndStoreErrorEvent(actName,
+                    message,
+                    getTimestamp(Instant.now()),
+                    getTimestamp(Instant.now()),
+                    parentEventId);
+            sendErrorResponse(responseObserver, message);
+        } else {
+            storeEvent(StoreEventRequest.newBuilder()
+                    .setEvent(Event.newBuilder().setId(newEventId())
+                            .setParentId(parentEventId)
+                            .setName(format("Received '%s' response message", responseMessage.getMetadata().getMessageType()))
+                            .setType("message")
+                            .setStartTimestamp(getTimestamp(Instant.now()))
+                            .setEndTimestamp(getTimestamp(Instant.now()))
+                            .setStatus(EventStatus.SUCCESS)
+                            .addAttachedMessageIds(responseMessage.getMetadata().getId())
+                            .build())
+                    .build());
+            PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
+                    .setResponseMessage(responseMessage)
+                    .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
+                    .setCheckpointId(checkpoint)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
         }
-        PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
-                .setResponseMessage(responseMessage)
-                .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
-                .setCheckpointId(checkpoint)
-                .build();
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
-
         logger.debug("processResponseMessage in {} ms", System.currentTimeMillis() - startTime);
     }
 
@@ -406,19 +424,17 @@ public class ActHandler extends ActImplBase {
                 .setStartTimestamp(start)
                 .setEndTimestamp(end)
                 .setStatus(EventStatus.SUCCESS)
-                .setBody(convertMessageToEvent(request))
+                .setBody(convertMessageToEvent(request.getMessage(), request.getConnectionId().getSessionAlias()))
                         .build())
                 .build();
     }
-
-
 
     private void createAndStoreErrorEvent(String actName, String message,
                                                Timestamp start,
                                                Timestamp end,
                                                EventID parentEventId) {
-        try {
-            StoreEventRequest errorEvent = StoreEventRequest.newBuilder()
+
+        StoreEventRequest errorEvent = StoreEventRequest.newBuilder()
                     .setEvent(Event.newBuilder().setId(newEventId())
                             .setParentId(parentEventId)
                             .setName(format("Internal %s error", actName))
@@ -429,19 +445,26 @@ public class ActHandler extends ActImplBase {
                             .setBody(ByteString.copyFrom(format("{\"message\": \"%s\"}", message), UTF_8))
                             .build())
                     .build();
-            Response response = eventStoreConnector.storeEvent(errorEvent);
+        storeEvent(errorEvent);
+    }
+
+    private void storeEvent(StoreEventRequest eventRequest) {
+        try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("try to store event: {}", toDebugMessage(eventRequest));
+            }
+            Response response = eventStoreConnector.storeEvent(eventRequest);
             if (response.hasError()) {
-                logger.error("could not store error event: {}", response.getError());
+                logger.error("could not store event: {}", response.getError());
             }
         } catch (Exception e) {
-            logger.error("could not store error event", e);
+            logger.error("could not store event", e);
         }
     }
 
-    private ByteString convertMessageToEvent(PlaceMessageRequestOrBuilder request) {
-        Message message = request.getMessage();
+    private ByteString convertMessageToEvent(Message message, String connectivityId) {
         SendMessageEvent messageEvent = new SendMessageEvent();
-        messageEvent.setConnectivityId(request.getConnectionId().getSessionAlias());
+        messageEvent.setConnectivityId(connectivityId);
         messageEvent.setMessageName(message.getMetadata().getMessageType());
         messageEvent.setFields(convertMessage(message));
         try {
@@ -514,6 +537,10 @@ public class ActHandler extends ActImplBase {
 
     private static EventID newEventId() {
         return EventID.newBuilder().setId(timeBased().toString()).build();
+    }
+
+    private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
+        return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
     }
 
     private static class ConnectivityContext {
