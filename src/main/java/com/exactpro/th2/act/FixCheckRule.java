@@ -15,11 +15,12 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
+import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.infra.grpc.Message;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.Value;
-import com.google.protobuf.TextFormat;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,15 +34,15 @@ public class FixCheckRule implements CheckRule {
     private final String expectedFieldName;
     private final String expectedFieldValue;
     private final Set<String> expectedMessageTypes;
-    private final Message requestMessage;
+    private final PlaceMessageRequest request;
 
     private final AtomicReference<Message> response = new AtomicReference<>();
 
-    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, Message requestMessage) {
+    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, PlaceMessageRequest request) {
         this.expectedFieldName = expectedFieldName;
         this.expectedFieldValue = expectedFieldValue;
         this.expectedMessageTypes = expectedMessageTypes;
-        this.requestMessage = requestMessage;
+        this.request = request;
     }
 
     @Override
@@ -69,8 +70,20 @@ public class FixCheckRule implements CheckRule {
     }
 
     private boolean checkSessionAlias(Message message) {
-        String requestSessionAlias = requestMessage.getMetadata().getId().getConnectionId().getSessionAlias();
-        String actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
-        return requestSessionAlias.equals(actualSessionAlias);
+
+        var actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
+
+        var requestMsgSessionAlias = request.getMessage().getMetadata().getId().getConnectionId().getSessionAlias();
+
+        if(StringUtils.isEmpty(requestMsgSessionAlias)){
+
+            var requestSessionAlias = request.getConnectionId().getSessionAlias();
+
+            return requestSessionAlias.equals(actualSessionAlias);
+        }
+
+        return requestMsgSessionAlias.equals(actualSessionAlias);
+
     }
+
 }
