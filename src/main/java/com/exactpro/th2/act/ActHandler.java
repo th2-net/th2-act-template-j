@@ -204,7 +204,7 @@ public class ActHandler extends ActImplBase {
         CheckRule checkRule = new FixCheckRule(expectedFieldName,
                 expectedFieldValue,
                 expectedMessageTypes,
-                request.getMessage());
+                request);
 
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
