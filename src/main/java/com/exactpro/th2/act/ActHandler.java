@@ -40,12 +40,15 @@ import com.exactpro.th2.common.event.Event.Status;
 import com.exactpro.th2.eventstore.grpc.EventStoreServiceService;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
 import com.exactpro.th2.infra.grpc.Checkpoint;
+import com.exactpro.th2.infra.grpc.ConnectionID;
 import com.exactpro.th2.infra.grpc.Event;
 import com.exactpro.th2.infra.grpc.EventID;
 import com.exactpro.th2.infra.grpc.EventStatus;
 import com.exactpro.th2.infra.grpc.ListValueOrBuilder;
 import com.exactpro.th2.infra.grpc.Message;
 import com.exactpro.th2.infra.grpc.MessageBatch;
+import com.exactpro.th2.infra.grpc.MessageID;
+import com.exactpro.th2.infra.grpc.MessageMetadata;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.RequestStatus;
 import com.exactpro.th2.infra.grpc.Value;
@@ -81,7 +84,9 @@ public class ActHandler extends ActImplBase {
     @Override
     public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
-            if(logger.isDebugEnabled()) { logger.debug("placeOrderFIX request: " + shortDebugString(request)); }
+            if (logger.isDebugEnabled()) {
+                logger.debug("placeOrderFIX request: " + shortDebugString(request));
+            }
             placeMessage(request, responseObserver, "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
@@ -96,7 +101,9 @@ public class ActHandler extends ActImplBase {
     public void sendMessage(PlaceMessageRequest request, StreamObserver<SendMessageResponse> responseObserver) {
         long startPlaceMessage = System.currentTimeMillis();
         try {
-            if(logger.isDebugEnabled()) { logger.debug("Send message request: " + shortDebugString(request)); }
+            if (logger.isDebugEnabled()) {
+                logger.debug("Send message request: " + shortDebugString(request));
+            }
 
             String actName = "sendMessage";
             // FIXME store parent with fail in case of children fail
@@ -267,7 +274,6 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-
     private void processResponseMessage(StreamObserver<PlaceMessageResponse> responseObserver, Checkpoint checkpoint,
             Message responseMessage) {
         long startTime = System.currentTimeMillis();
@@ -310,13 +316,12 @@ public class ActHandler extends ActImplBase {
 
             //May be use in future for filtering
             //request.getConnectionId().getSessionAlias();
-
-            messageRouter.send(MessageBatch
-                    .newBuilder()
-                    .addMessages(Message
-                            .newBuilder(request.getMessage())
-                    .setParentEventId(parentEventId)
-                    .build()).build());
+            Message message = backwardCompatibilityConnectionId(request);
+            messageRouter.send(MessageBatch.newBuilder()
+                    .addMessages(Message.newBuilder(message)
+                            .setParentEventId(parentEventId)
+                            .build())
+                    .build());
             Timestamp end = getTimestamp(Instant.now());
             //TODO remove after solving issue TH2-217
             StoreEventRequest sendMessageEvent = createSendMessageEvent(request, start, end, parentEventId);
@@ -325,6 +330,20 @@ public class ActHandler extends ActImplBase {
         } finally {
             logger.debug("Send message end");
         }
+    }
+
+    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
+        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
+        if (connectionId != null && !connectionId.getSessionAlias().isEmpty()) {
+            return request.getMessage();
+        }
+        return Message.newBuilder(request.getMessage())
+                .mergeMetadata(MessageMetadata.newBuilder()
+                        .mergeId(MessageID.newBuilder()
+                                .setConnectionId(request.getConnectionId())
+                                .build())
+                        .build())
+                .build();
     }
 
     private static Timestamp getTimestamp(Instant instant) {
@@ -340,13 +359,13 @@ public class ActHandler extends ActImplBase {
             EventID parentEventId) {
         return StoreEventRequest.newBuilder()
                 .setEvent(Event.newBuilder().setId(newEventId())
-                .setParentId(parentEventId)
-                .setName("Send '" + request.getMessage().getMetadata().getMessageType() + "' message")
-                .setType("sendMessage")
-                .setStartTimestamp(start)
-                .setEndTimestamp(end)
-                .setStatus(EventStatus.SUCCESS)
-                .setBody(convertMessageToEvent(request))
+                        .setParentId(parentEventId)
+                        .setName("Send '" + request.getMessage().getMetadata().getMessageType() + "' message")
+                        .setType("sendMessage")
+                        .setStartTimestamp(start)
+                        .setEndTimestamp(end)
+                        .setStatus(EventStatus.SUCCESS)
+                        .setBody(convertMessageToEvent(request))
                         .build())
                 .build();
     }
@@ -421,7 +440,9 @@ public class ActHandler extends ActImplBase {
         CheckpointResponse response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)
                 .build());
-        if (logger.isDebugEnabled()) { logger.debug("Register checkpoint end. Response " + shortDebugString(response)); }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Register checkpoint end. Response " + shortDebugString(response));
+        }
         return response.getCheckpoint();
     }
 
