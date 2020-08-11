@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.infra.grpc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,16 +40,6 @@ import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.common.event.Event.Status;
 import com.exactpro.th2.eventstore.grpc.EventStoreServiceService;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
-import com.exactpro.th2.infra.grpc.Checkpoint;
-import com.exactpro.th2.infra.grpc.Event;
-import com.exactpro.th2.infra.grpc.EventID;
-import com.exactpro.th2.infra.grpc.EventStatus;
-import com.exactpro.th2.infra.grpc.ListValueOrBuilder;
-import com.exactpro.th2.infra.grpc.Message;
-import com.exactpro.th2.infra.grpc.MessageBatch;
-import com.exactpro.th2.infra.grpc.MessageOrBuilder;
-import com.exactpro.th2.infra.grpc.RequestStatus;
-import com.exactpro.th2.infra.grpc.Value;
 import com.exactpro.th2.schema.grpc.router.GrpcRouter;
 import com.exactpro.th2.schema.message.MessageRouter;
 import com.exactpro.th2.verifier.grpc.CheckpointRequest;
@@ -201,10 +192,9 @@ public class ActHandler extends ActImplBase {
             String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
         long startPlaceMessage = System.currentTimeMillis();
 
-        CheckRule checkRule = new FixCheckRule(expectedFieldName,
-                expectedFieldValue,
-                expectedMessageTypes,
-                request);
+        var requestConnId = backwardCompatibilityConnectionId(request).getMetadata().getId().getConnectionId();
+
+        var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
 
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
@@ -325,6 +315,20 @@ public class ActHandler extends ActImplBase {
         } finally {
             logger.debug("Send message end");
         }
+    }
+
+    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
+        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
+        if (connectionId != null && !connectionId.getSessionAlias().isEmpty()) {
+            return request.getMessage();
+        }
+        return Message.newBuilder(request.getMessage())
+                .mergeMetadata(MessageMetadata.newBuilder()
+                        .mergeId(MessageID.newBuilder()
+                                .setConnectionId(request.getConnectionId())
+                                .build())
+                        .build())
+                .build();
     }
 
     private static Timestamp getTimestamp(Instant instant) {
