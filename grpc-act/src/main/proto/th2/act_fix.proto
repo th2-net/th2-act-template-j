@@ -44,7 +44,9 @@ message SendMessageResponse {
 
 message PlaceMessageRequest {
     Message message = 1;
-    ConnectionID connection_id = 2;
+    /* Please set connection_id into message. Act transfer this value into message
+     * automatically if message hasn't connectivityID for backward compatibility */
+    ConnectionID connection_id = 2[deprecated = true];
     EventID parent_event_id = 4;
     string description = 5;
 }
