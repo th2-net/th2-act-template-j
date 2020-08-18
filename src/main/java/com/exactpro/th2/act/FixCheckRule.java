@@ -15,11 +15,12 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
+import com.exactpro.th2.infra.grpc.ConnectionID;
 import com.exactpro.th2.infra.grpc.Message;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.Value;
-import com.google.protobuf.TextFormat;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,24 +34,24 @@ public class FixCheckRule implements CheckRule {
     private final String expectedFieldName;
     private final String expectedFieldValue;
     private final Set<String> expectedMessageTypes;
-    private final Message requestMessage;
+    private final ConnectionID requestConnId;
 
     private final AtomicReference<Message> response = new AtomicReference<>();
 
-    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, Message requestMessage) {
+    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, ConnectionID requestConnId) {
         this.expectedFieldName = expectedFieldName;
         this.expectedFieldValue = expectedFieldValue;
         this.expectedMessageTypes = expectedMessageTypes;
-        this.requestMessage = requestMessage;
+        this.requestConnId = requestConnId;
     }
 
     @Override
-    public boolean onMessage(Message message) {
-        String messageType = message.getMetadata().getMessageType();
-        if (checkSessionAlias(message) && expectedMessageTypes.contains(messageType)) {
-            if(logger.isDebugEnabled()) { logger.debug("check the message: {}", shortDebugString(message)); }
-            if (checkExpectedField(message)) {
-                response.set(message);
+    public boolean onMessage(Message incomingMessage) {
+        String messageType = incomingMessage.getMetadata().getMessageType();
+        if (checkSessionAlias(incomingMessage) && expectedMessageTypes.contains(messageType)) {
+            if(logger.isDebugEnabled()) { logger.debug("check the message: {}", shortDebugString(incomingMessage)); }
+            if (checkExpectedField(incomingMessage)) {
+                response.set(incomingMessage);
                 logger.debug("FixCheckRule passed on {} messageType", messageType);
                 return true;
             }
@@ -69,8 +70,8 @@ public class FixCheckRule implements CheckRule {
     }
 
     private boolean checkSessionAlias(Message message) {
-        String requestSessionAlias = requestMessage.getMetadata().getId().getConnectionId().getSessionAlias();
-        String actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
-        return requestSessionAlias.equals(actualSessionAlias);
+        var actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
+        return requestConnId.getSessionAlias().equals(actualSessionAlias);
     }
+
 }

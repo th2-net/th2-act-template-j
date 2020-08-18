@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.infra.grpc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -208,10 +209,9 @@ public class ActHandler extends ActImplBase {
             String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
         long startPlaceMessage = System.currentTimeMillis();
 
-        CheckRule checkRule = new FixCheckRule(expectedFieldName,
-                expectedFieldValue,
-                expectedMessageTypes,
-                request.getMessage());
+        var requestConnId = backwardCompatibilityConnectionId(request).getMetadata().getId().getConnectionId();
+
+        var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
 
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
