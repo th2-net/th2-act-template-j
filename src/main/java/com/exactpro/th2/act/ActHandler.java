@@ -98,7 +98,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             if(logger.isDebugEnabled()) { logger.debug("placeOrderFIX request: " + shortDebugString(request)); }
-            placeMessage(request, responseObserver, "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessage(request, responseObserver, "NewOrderSingle", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place Order failed. Message = {}", request.getMessage(), e);
@@ -149,7 +149,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeOrderMassCancelRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessage(request, responseObserver, "OrderMassCancelRequest", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("OrderMassCancelReport"), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place OrderMassCancelRequest failed. Message = {}", request.getMessage(), e);
@@ -163,7 +163,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteCancelFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteCancel", "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
                     ImmutableSet.of("MassQuoteAcknowledgement"), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteCancel failed. Message = {}", request.getMessage(), e);
@@ -177,7 +177,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteRequest", "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
                     ImmutableSet.of("QuoteStatusReport"), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteRequest failed. Message = {}", request.getMessage(), e);
@@ -191,7 +191,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteResponseFIX request: {}", request);
-            placeMessage(request, responseObserver, "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteResponse", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "QuoteStatusReport"), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteRespons failed. Message = {}", request.getMessage(), e);
@@ -205,7 +205,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteFIX request: {}", request);
-            placeMessage(request, responseObserver, "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessage(request, responseObserver, "Quote", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("QuoteAck"), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place Quote failed. Message = {}", request.getMessage(), e);
@@ -215,11 +215,19 @@ public class ActHandler extends ActImplBase {
         }
     }
 
+    private void checkRequestMessageType(String expectedMessageType, MessageMetadata metadata) {
+        if (!expectedMessageType.equals(metadata.getMessageType())) {
+            throw new IllegalArgumentException(format("Unsupported request message type '%s', expected '%s'",
+                    metadata.getMessageType(), expectedMessageType));
+        }
+    }
+
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-            String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+            String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
         long startPlaceMessage = System.currentTimeMillis();
         EventID parentId = request.getParentEventId();
         try {
+            checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
             CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
 
             ConnectivityContext connectivityContext = getConnectivityContext(request);
