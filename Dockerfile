@@ -1,3 +1,7 @@
+FROM gradle:6.4-jdk11 AS build
+COPY ./ .
+RUN gradle dockerPrepare
+
 FROM openjdk:12-alpine
 ENV GRPC_PORT=8080 \
     RABBITMQ_HOST=rabbitmq \
@@ -15,5 +19,5 @@ ENV GRPC_PORT=8080 \
 #FIXME: Act should resolve queue information from session info which passed by caller (script)
     TH2_FIX_CONNECTIVITY_IN_MQ=""
 WORKDIR /home
-COPY ./ .
+COPY --from=build ./ .
 ENTRYPOINT ["/home/act-service/bin/act-service", "/home/act-service/etc/config.yml"]
