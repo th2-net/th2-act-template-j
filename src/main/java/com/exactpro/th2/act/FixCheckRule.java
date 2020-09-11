@@ -1,5 +1,5 @@
-/******************************************************************************
- * Copyright 2009-2020 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,22 +12,21 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.act;
+
+import static com.google.protobuf.TextFormat.shortDebugString;
+
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.infra.grpc.ConnectionID;
 import com.exactpro.th2.infra.grpc.Message;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.Value;
-
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static com.google.protobuf.TextFormat.*;
 
 public class FixCheckRule implements CheckRule {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());

@@ -1,9 +1,12 @@
 /*
  * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,6 +20,9 @@ import static com.exactpro.th2.common.event.Event.Status.PASSED;
 import static com.exactpro.th2.infra.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.infra.grpc.RequestStatus.Status.SUCCESS;
 import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.time.Instant.ofEpochMilli;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
@@ -28,7 +34,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.exactpro.th2.infra.grpc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +44,7 @@ import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.common.event.Event.Status;
 import com.exactpro.th2.eventstore.grpc.EventStoreServiceService;
+import com.exactpro.th2.eventstore.grpc.Response;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
 import com.exactpro.th2.infra.grpc.Checkpoint;
 import com.exactpro.th2.infra.grpc.ConnectionID;
@@ -62,7 +68,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
+import com.google.protobuf.util.JsonFormat;
 
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -88,7 +96,7 @@ public class ActHandler extends ActImplBase {
             if (logger.isDebugEnabled()) {
                 logger.debug("placeOrderFIX request: " + shortDebugString(request));
             }
-            placeMessage(request, responseObserver, "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessage(request, responseObserver, "NewOrderSingle", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place Order failed. Message = {}", request.getMessage(), e);
@@ -139,7 +147,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeOrderMassCancelRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessage(request, responseObserver, "OrderMassCancelRequest", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("OrderMassCancelReport"), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place OrderMassCancelRequest failed. Message = {}", request.getMessage(), e);
@@ -153,7 +161,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteCancelFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteCancel", "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
                     ImmutableSet.of("MassQuoteAcknowledgement"), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteCancel failed. Message = {}", request.getMessage(), e);
@@ -167,7 +175,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteRequest", "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
                     ImmutableSet.of("QuoteStatusReport"), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteRequest failed. Message = {}", request.getMessage(), e);
@@ -181,7 +189,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteResponseFIX request: {}", request);
-            placeMessage(request, responseObserver, "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessage(request, responseObserver, "QuoteResponse", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "QuoteStatusReport"), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place QuoteRespons failed. Message = {}", request.getMessage(), e);
@@ -195,7 +203,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteFIX request: {}", request);
-            placeMessage(request, responseObserver, "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessage(request, responseObserver, "Quote", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("QuoteAck"), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Place Quote failed. Message = {}", request.getMessage(), e);
@@ -205,40 +213,58 @@ public class ActHandler extends ActImplBase {
         }
     }
 
+    private void checkRequestMessageType(String expectedMessageType, MessageMetadata metadata) {
+        if (!expectedMessageType.equals(metadata.getMessageType())) {
+            throw new IllegalArgumentException(format("Unsupported request message type '%s', expected '%s'",
+                    metadata.getMessageType(), expectedMessageType));
+        }
+    }
+
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-            String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+            String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+
         long startPlaceMessage = System.currentTimeMillis();
-
-        var requestConnId = backwardCompatibilityConnectionId(request).getMetadata().getId().getConnectionId();
-
+        EventID parentId = request.getParentEventId();
+        ConnectionID requestConnId = request.getConnectionId();
+        checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
         var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
 
         // FIXME store parent with fail in case of children fail
         StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
-        EventID parentId = storeEventRequest.getEvent().getId();
+        parentId = storeEventRequest.getEvent().getId();
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
         try (MessageReceiver messageReceiver = new MessageReceiver(messageRouter, checkRule)) {
-            if (isSendPlaceMessage(request, responseObserver, null, parentId)) {
-
+            if (isSendPlaceMessage(request, responseObserver, messageRouter, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
-                messageReceiver.awaitSync(getTimeout(Context.current().getDeadline()), MILLISECONDS);
-                logger.debug("messageReceiver.awaitSync for {} in {} ms", actName, System.currentTimeMillis() - startAwaitSync);
-
+                long timeout = getTimeout(Context.current().getDeadline());
+                messageReceiver.awaitSync(timeout, MILLISECONDS);
+                logger.debug("messageReceiver.awaitSync for {} in {} ms",
+                        actName, System.currentTimeMillis() - startAwaitSync);
                 if (Context.current().isCancelled()) {
                     logger.warn("'{}' request cancelled by client", actName);
                     sendErrorResponse(responseObserver, "Cancelled by client");
                 } else {
-                    processResponseMessage(responseObserver, checkpoint, messageReceiver.getResponseMessage());
+                    processResponseMessage(actName,
+                            responseObserver,
+                            checkpoint,
+                            parentId,
+                            messageReceiver.getResponseMessage(),
+                            timeout);
                 }
             }
         } catch (RuntimeException | InterruptedException e) {
             logger.error("'{}' internal error: {}", actName, e.getMessage(), e);
+            createAndStoreErrorEvent(actName,
+                    e.getMessage(),
+                    getTimestamp(ofEpochMilli(startPlaceMessage)),
+                    getTimestamp(Instant.now()),
+                    parentId);
             sendErrorResponse(responseObserver, "InternalError: " + e.getMessage());
+        } finally {
+            logger.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
         }
-
-        logger.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
     }
 
     private static long getTimeout(Deadline deadline) {
@@ -274,22 +300,41 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private void processResponseMessage(StreamObserver<PlaceMessageResponse> responseObserver, Checkpoint checkpoint,
-            Message responseMessage) {
+    private void processResponseMessage(String actName,
+                                        StreamObserver<PlaceMessageResponse> responseObserver,
+                                        Checkpoint checkpoint,
+                                        EventID parentEventId,
+                                        Message responseMessage,
+                                        long timeout) {
         long startTime = System.currentTimeMillis();
-
+        String message = format("No response message received during '%s' ms", timeout);
         if (responseMessage == null) {
-            sendErrorResponse(responseObserver, "No response message received");
-            return;
+            createAndStoreErrorEvent(actName,
+                    message,
+                    getTimestamp(Instant.now()),
+                    getTimestamp(Instant.now()),
+                    parentEventId);
+            sendErrorResponse(responseObserver, message);
+        } else {
+            storeEvent(StoreEventRequest.newBuilder()
+                    .setEvent(Event.newBuilder().setId(newEventId())
+                            .setParentId(parentEventId)
+                            .setName(format("Received '%s' response message", responseMessage.getMetadata().getMessageType()))
+                            .setType("message")
+                            .setStartTimestamp(getTimestamp(Instant.now()))
+                            .setEndTimestamp(getTimestamp(Instant.now()))
+                            .setStatus(EventStatus.SUCCESS)
+                            .addAttachedMessageIds(responseMessage.getMetadata().getId())
+                            .build())
+                    .build());
+            PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
+                    .setResponseMessage(responseMessage)
+                    .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
+                    .setCheckpointId(checkpoint)
+                    .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
         }
-        PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
-                .setResponseMessage(responseMessage)
-                .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
-                .setCheckpointId(checkpoint)
-                .build();
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
-
         logger.debug("processResponseMessage in {} ms", System.currentTimeMillis() - startTime);
     }
 
@@ -365,15 +410,47 @@ public class ActHandler extends ActImplBase {
                         .setStartTimestamp(start)
                         .setEndTimestamp(end)
                         .setStatus(EventStatus.SUCCESS)
-                        .setBody(convertMessageToEvent(request))
+                        .setBody(convertMessageToEvent(request.getMessage(), request.getConnectionId().getSessionAlias()))
                         .build())
                 .build();
     }
 
-    private ByteString convertMessageToEvent(PlaceMessageRequestOrBuilder request) {
-        Message message = request.getMessage();
+    private void createAndStoreErrorEvent(String actName, String message,
+                                               Timestamp start,
+                                               Timestamp end,
+                                               EventID parentEventId) {
+
+        StoreEventRequest errorEvent = StoreEventRequest.newBuilder()
+                    .setEvent(Event.newBuilder().setId(newEventId())
+                            .setParentId(parentEventId)
+                            .setName(format("Internal %s error", actName))
+                            .setType("Error")
+                            .setStartTimestamp(start)
+                            .setEndTimestamp(end)
+                            .setStatus(EventStatus.FAILED)
+                            .setBody(ByteString.copyFrom(format("{\"message\": \"%s\"}", message), UTF_8))
+                            .build())
+                    .build();
+        storeEvent(errorEvent);
+    }
+
+    private void storeEvent(StoreEventRequest eventRequest) {
+        try {
+            if (logger.isDebugEnabled()) {
+                logger.debug("try to store event: {}", toDebugMessage(eventRequest));
+            }
+            Response response = eventStoreConnector.storeEvent(eventRequest);
+            if (response.hasError()) {
+                logger.error("could not store event: {}", response.getError());
+            }
+        } catch (Exception e) {
+            logger.error("could not store event", e);
+        }
+    }
+
+    private ByteString convertMessageToEvent(Message message, String connectivityId) {
         SendMessageEvent messageEvent = new SendMessageEvent();
-        messageEvent.setConnectivityId(request.getConnectionId().getSessionAlias());
+        messageEvent.setConnectivityId(connectivityId);
         messageEvent.setMessageName(message.getMetadata().getMessageType());
         messageEvent.setFields(convertMessage(message));
         try {
@@ -448,5 +525,9 @@ public class ActHandler extends ActImplBase {
 
     private static EventID newEventId() {
         return EventID.newBuilder().setId(timeBased().toString()).build();
+    }
+
+    private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
+        return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
     }
 }
