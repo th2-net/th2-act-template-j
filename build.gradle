@@ -134,3 +134,9 @@ docker {
 
     copySpec.from(tarTree("$buildDir/distributions/${archivesBaseName}.tar"))
 }
+
+static def getDate() {
+	def date = new Date()
+	def formattedDate = date.format('yyyyMMdd-HH:mm:ss.SSS')
+	return formattedDate
+}
