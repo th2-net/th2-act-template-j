@@ -1,1 +1,4 @@
+rootProject.name = 'th2-act'
+
 include "grpc-act"
+project(':grpc-act').name = 'th2-grpc-act'
