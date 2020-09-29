@@ -20,5 +20,5 @@ ENV GRPC_PORT=8080 \
 #FIXME: Act should resolve queue information from session info which passed by caller (script)
     TH2_FIX_CONNECTIVITY_IN_MQ=""
 WORKDIR /home
-COPY --from=build /home/gradle/build/docker ./
+COPY --from=build /home/gradle/build/docker .
 ENTRYPOINT ["/home/service/bin/service", "/home/service/etc/config.yml"]
