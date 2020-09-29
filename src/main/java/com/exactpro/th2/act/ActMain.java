@@ -62,7 +62,7 @@ public class ActMain {
 
             ActHandler actHandler = new ActHandler(grpcRouter, messageRouterParsedBatch);
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
-            addShutdownHook(actHandler, actServer);
+            addShutdownHook(factory, actServer);
             LOGGER.info("Act started");
             actServer.blockUntilShutdown();
         } catch (Throwable e) {
@@ -71,11 +71,11 @@ public class ActMain {
         }
     }
 
-    private static void addShutdownHook(ActHandler actHandler, ActServer actServer) {
+    private static void addShutdownHook(CommonFactory commonFactory, ActServer actServer) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 LOGGER.info("Act is terminating");
-                actHandler.close();
+                commonFactory.close();
                 actServer.stop();
             } catch (InterruptedException e) {
                 LOGGER.error("gRPC server shutdown is interrupted", e);

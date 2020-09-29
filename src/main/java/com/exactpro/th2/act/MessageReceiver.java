@@ -65,7 +65,7 @@ public class MessageReceiver implements AutoCloseable {
             if (subscriberMonitor != null) {
                 subscriberMonitor.unsubscribe();
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error("Could not stop subscriber", e);
         }
     }

@@ -290,16 +290,6 @@ public class ActHandler extends ActImplBase {
         return storeEventRequest;
     }
 
-    void close() {
-        if (messageRouter != null) {
-            try {
-                messageRouter.unsubscribeAll();
-            } catch (IOException e) {
-                logger.error("Can not unsubscribe from all queues in message router");
-            }
-        }
-    }
-
     private void processResponseMessage(String actName,
                                         StreamObserver<PlaceMessageResponse> responseObserver,
                                         Checkpoint checkpoint,
