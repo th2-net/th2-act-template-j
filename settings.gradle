@@ -1,4 +1,4 @@
-rootProject.name = 'th2-act'
+rootProject.name = 'act-fix'
 
-include "grpc-act"
-project(':grpc-act').name = 'th2-grpc-act'
+include "grpc-act-fix"
+project(':grpc-act-fix').name = 'grpc-act-fix'
