@@ -110,7 +110,6 @@ dependencies {
     implementation "com.exactpro.th2:common"
 
     implementation "com.exactpro.th2:grpc-check1"
-    implementation "com.exactpro.th2:grpc-conn"
 
     implementation "com.datastax.cassandra:cassandra-driver-core:3.6.0" //FIXME: Migrate to another library for UUID
 
