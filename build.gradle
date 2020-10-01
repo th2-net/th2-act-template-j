@@ -44,7 +44,7 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:th2-bom:2.0.+')
+        api platform('com.exactpro.th2:bom:2.0.+')
 
         implementation "com.exactpro.th2:grpc-common"
         implementation "com.exactpro.th2:grpc-estore"
