@@ -60,7 +60,7 @@ public class ActMain {
             GrpcRouter grpcRouter = factory.getGrpcRouter();
             MessageRouter<MessageBatch> messageRouterParsedBatch = (MessageRouter<MessageBatch>) factory.getMessageRouterParsedBatch();
 
-            ActHandler actHandler = new ActHandler(grpcRouter, messageRouterParsedBatch);
+            ActHandler actHandler = new ActHandler(factory, messageRouterParsedBatch);
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             addShutdownHook(factory, actServer);
             LOGGER.info("Act started");

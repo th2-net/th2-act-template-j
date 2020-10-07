@@ -43,12 +43,11 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.common.event.Event.Status;
-import com.exactpro.th2.eventstore.grpc.EventStoreServiceService;
-import com.exactpro.th2.eventstore.grpc.Response;
 import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
 import com.exactpro.th2.infra.grpc.Checkpoint;
 import com.exactpro.th2.infra.grpc.ConnectionID;
 import com.exactpro.th2.infra.grpc.Event;
+import com.exactpro.th2.infra.grpc.EventBatch;
 import com.exactpro.th2.infra.grpc.EventID;
 import com.exactpro.th2.infra.grpc.EventStatus;
 import com.exactpro.th2.infra.grpc.ListValueOrBuilder;
@@ -59,7 +58,7 @@ import com.exactpro.th2.infra.grpc.MessageMetadata;
 import com.exactpro.th2.infra.grpc.MessageOrBuilder;
 import com.exactpro.th2.infra.grpc.RequestStatus;
 import com.exactpro.th2.infra.grpc.Value;
-import com.exactpro.th2.schema.grpc.router.GrpcRouter;
+import com.exactpro.th2.schema.factory.CommonFactory;
 import com.exactpro.th2.schema.message.MessageRouter;
 import com.exactpro.th2.verifier.grpc.CheckpointRequest;
 import com.exactpro.th2.verifier.grpc.CheckpointResponse;
@@ -81,13 +80,13 @@ public class ActHandler extends ActImplBase {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
 
     private final VerifierService verifierConnector;
-    private final EventStoreServiceService eventStoreConnector;
+    private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<MessageBatch> messageRouter;
 
-    ActHandler(GrpcRouter grpcRouter, MessageRouter<MessageBatch> router) throws ClassNotFoundException {
+    ActHandler(CommonFactory factory, MessageRouter<MessageBatch> router) throws ClassNotFoundException {
         this.messageRouter = router;
-        this.verifierConnector = grpcRouter.getService(VerifierService.class);
-        this.eventStoreConnector = grpcRouter.getService(EventStoreServiceService.class);
+        this.eventBatchMessageRouter = factory.getEventBatchRouter();
+        this.verifierConnector = factory.getGrpcRouter().getService(VerifierService.class);
     }
 
     @Override
@@ -285,8 +284,13 @@ public class ActHandler extends ActImplBase {
                 .setEvent(event.toProtoEvent(request.getParentEventId().getId()))
                 .build();
         //FIXME process response
-        eventStoreConnector.storeEvent(storeEventRequest);
-        logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+        try {
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(storeEventRequest.getEvent()).build());
+            logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+        } catch (IOException e) {
+            throw new RuntimeException("Can not send event = " + storeEventRequest.getEvent().getId().getId(), e);
+        }
+
         return storeEventRequest;
     }
 
@@ -361,7 +365,7 @@ public class ActHandler extends ActImplBase {
             //TODO remove after solving issue TH2-217
             StoreEventRequest sendMessageEvent = createSendMessageEvent(request, start, end, parentEventId);
             //TODO process response
-            eventStoreConnector.storeEvent(sendMessageEvent);
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent.getEvent()).build());
         } finally {
             logger.debug("Send message end");
         }
@@ -429,10 +433,7 @@ public class ActHandler extends ActImplBase {
             if (logger.isDebugEnabled()) {
                 logger.debug("try to store event: {}", toDebugMessage(eventRequest));
             }
-            Response response = eventStoreConnector.storeEvent(eventRequest);
-            if (response.hasError()) {
-                logger.error("could not store event: {}", response.getError());
-            }
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest.getEvent()).build());
         } catch (Exception e) {
             logger.error("could not store event", e);
         }
