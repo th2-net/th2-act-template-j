@@ -285,7 +285,7 @@ public class ActHandler extends ActImplBase {
                 .build();
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(storeEventRequest.getEvent()).build());
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(storeEventRequest.getEvent()).build(), "publish", "event");
             logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
         } catch (IOException e) {
             throw new RuntimeException("Can not send event = " + storeEventRequest.getEvent().getId().getId(), e);
@@ -365,7 +365,7 @@ public class ActHandler extends ActImplBase {
             //TODO remove after solving issue TH2-217
             StoreEventRequest sendMessageEvent = createSendMessageEvent(request, start, end, parentEventId);
             //TODO process response
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent.getEvent()).build());
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent.getEvent()).build(), "publish", "event");
         } finally {
             logger.debug("Send message end");
         }
@@ -433,7 +433,7 @@ public class ActHandler extends ActImplBase {
             if (logger.isDebugEnabled()) {
                 logger.debug("try to store event: {}", toDebugMessage(eventRequest));
             }
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest.getEvent()).build());
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest.getEvent()).build(), "publish", "event");
         } catch (Exception e) {
             logger.error("could not store event", e);
         }
