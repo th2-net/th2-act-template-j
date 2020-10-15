@@ -15,9 +15,9 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.infra.grpc.Message;
-import com.exactpro.th2.infra.grpc.MessageOrBuilder;
-import com.exactpro.th2.infra.grpc.Value;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.Value;
 import com.google.protobuf.TextFormat;
 
 import org.slf4j.Logger;

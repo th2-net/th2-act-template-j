@@ -44,10 +44,10 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:th2-bom:1.0.8')
+        api platform('com.exactpro.th2:bom:2.0.+')
 
-        implementation "com.exactpro.th2:th2-grpc-infra"
-        implementation "com.exactpro.th2:th2-grpc-event-store"
+        implementation "com.exactpro.th2:grpc-common"
+        implementation "com.exactpro.th2:grpc-estore"
     }
 
     jar {
@@ -106,11 +106,25 @@ apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
 dependencies {
-    implementation(project(':th2-grpc-act'))
-    implementation "com.exactpro.th2:th2-common"
+    implementation "com.exactpro.th2:common"
+    implementation "com.exactpro.th2:grpc-act-template"
+    implementation "com.exactpro.th2:grpc-check1"
+    implementation "com.exactpro.th2:grpc-common"
 
-    implementation "com.exactpro.th2:th2-grpc-verifier"
-    implementation "com.exactpro.th2:th2-grpc-connectivity"
+    implementation "com.google.protobuf:protobuf-java-util"
+    implementation "io.grpc:grpc-protobuf"
+    implementation "io.grpc:grpc-stub"
+    implementation "io.grpc:grpc-core"
+    implementation "io.grpc:grpc-netty"
+
+    implementation "com.rabbitmq:amqp-client"
+
+    implementation "com.fasterxml.jackson.core:jackson-core"
+    implementation "com.fasterxml.jackson.core:jackson-databind"
+
+    implementation "org.jetbrains:annotations"
+
+    implementation "org.apache.commons:commons-lang3"
 
     implementation "com.datastax.cassandra:cassandra-driver-core:3.6.0" //FIXME: Migrate to another library for UUID
 
