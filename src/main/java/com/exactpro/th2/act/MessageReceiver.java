@@ -22,14 +22,13 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.exactpro.th2.connectivity.grpc.QueueInfoOrBuilder;
-import com.exactpro.th2.infra.grpc.Message;
+import com.exactpro.th2.common.grpc.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.RabbitMqSubscriber;
 import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.infra.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageBatch;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.rabbitmq.client.Delivery;
 

@@ -106,10 +106,25 @@ apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
 dependencies {
-    implementation(project(':grpc-act-fix'))
     implementation "com.exactpro.th2:common"
-
+    implementation "com.exactpro.th2:grpc-act-template"
     implementation "com.exactpro.th2:grpc-check1"
+    implementation "com.exactpro.th2:grpc-common"
+
+    implementation "com.google.protobuf:protobuf-java-util"
+    implementation "io.grpc:grpc-protobuf"
+    implementation "io.grpc:grpc-stub"
+    implementation "io.grpc:grpc-core"
+    implementation "io.grpc:grpc-netty"
+
+    implementation "com.rabbitmq:amqp-client"
+
+    implementation "com.fasterxml.jackson.core:jackson-core"
+    implementation "com.fasterxml.jackson.core:jackson-databind"
+
+    implementation "org.jetbrains:annotations"
+
+    implementation "org.apache.commons:commons-lang3"
 
     implementation "com.datastax.cassandra:cassandra-driver-core:3.6.0" //FIXME: Migrate to another library for UUID
 

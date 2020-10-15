@@ -1,4 +1,1 @@
-rootProject.name = 'act-fix'
-
-include "grpc-act-fix"
-project(':grpc-act-fix').name = 'grpc-act-fix'
+rootProject.name = 'act-template'

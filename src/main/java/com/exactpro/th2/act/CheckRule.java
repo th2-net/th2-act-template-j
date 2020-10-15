@@ -15,7 +15,7 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.infra.grpc.Message;
+import com.exactpro.th2.common.grpc.Message;
 
 public interface CheckRule {
     boolean onMessage(Message message);
