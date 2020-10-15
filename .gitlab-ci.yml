@@ -1,9 +1,8 @@
 variables:
-  APP_NAME: "th2-act-fix"
+  APP_NAME: "th2-act-template"
   MAJOR_VERSION: "2"
   MINOR_VERSION: "0"
   MAINTENANCE_VERSION: "0"
-  ARTIFACTORY_PUBLISH_ENABLED: 'true'
 
 include:
   - project: 'vivarium/th2/pipelines'
