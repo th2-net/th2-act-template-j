@@ -27,13 +27,10 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.schema.message.MessageListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,11 +79,13 @@ public class ActHandler extends ActImplBase {
     private final VerifierService verifierConnector;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<MessageBatch> messageRouter;
+    private final List<MessageListener<MessageBatch>> callbackList;
 
-    ActHandler(CommonFactory factory, MessageRouter<MessageBatch> router) throws ClassNotFoundException {
+    ActHandler(CommonFactory factory, MessageRouter<MessageBatch> router, List<MessageListener<MessageBatch>> callbackList) throws ClassNotFoundException {
         this.messageRouter = router;
         this.eventBatchMessageRouter = factory.getEventBatchRouter();
         this.verifierConnector = factory.getGrpcRouter().getService(VerifierService.class);
+        this.callbackList = callbackList;
     }
 
     @Override
@@ -234,7 +233,7 @@ public class ActHandler extends ActImplBase {
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
-        try (MessageReceiver messageReceiver = new MessageReceiver(messageRouter, checkRule)) {
+        try (MessageReceiver messageReceiver = new MessageReceiver(callbackList, checkRule)) {
             if (isSendPlaceMessage(request, responseObserver, messageRouter, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
                 long timeout = getTimeout(Context.current().getDeadline());

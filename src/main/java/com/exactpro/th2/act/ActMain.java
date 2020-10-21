@@ -15,19 +15,23 @@
  */
 package com.exactpro.th2.act;
 
-import static com.exactpro.th2.ConfigurationUtils.safeLoad;
-
-import org.apache.commons.cli.ParseException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.exactpro.th2.configuration.MicroserviceConfiguration;
 import com.exactpro.th2.configuration.RabbitMQConfiguration;
 import com.exactpro.th2.configuration.Th2Configuration;
 import com.exactpro.th2.infra.grpc.MessageBatch;
 import com.exactpro.th2.schema.factory.CommonFactory;
 import com.exactpro.th2.schema.grpc.router.GrpcRouter;
+import com.exactpro.th2.schema.message.MessageListener;
 import com.exactpro.th2.schema.message.MessageRouter;
+import com.exactpro.th2.schema.message.SubscriberMonitor;
+import org.apache.commons.cli.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static com.exactpro.th2.ConfigurationUtils.safeLoad;
 
 public class ActMain {
 
@@ -58,11 +62,26 @@ public class ActMain {
             }
 
             GrpcRouter grpcRouter = factory.getGrpcRouter();
-            MessageRouter<MessageBatch> messageRouterParsedBatch = (MessageRouter<MessageBatch>) factory.getMessageRouterParsedBatch();
 
-            ActHandler actHandler = new ActHandler(factory, messageRouterParsedBatch);
+            MessageRouter<MessageBatch> messageRouterParsedBatch = factory.getMessageRouterParsedBatch();
+
+            String FIRST_ATTRIBUTE_NAME = "first";
+            String OE_ATTRIBUTE_NAME = "oe";
+            String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
+            List<MessageListener<MessageBatch>> callbackList = new CopyOnWriteArrayList<>();
+            SubscriberMonitor subscriberMonitor = messageRouterParsedBatch.subscribeAll((String consumingTag, MessageBatch batch) ->
+                    callbackList.forEach(callback -> {
+                        try {
+                            callback.handler(consumingTag, batch);
+                        } catch (Exception e) {
+                            LOGGER.error("Could not process incoming message", e);
+                        }
+                    }),
+                    FIRST_ATTRIBUTE_NAME, OE_ATTRIBUTE_NAME, SUBSCRIBE_ATTRIBUTE_NAME);
+
+            ActHandler actHandler = new ActHandler(factory, messageRouterParsedBatch, callbackList);
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
-            addShutdownHook(factory, actServer);
+            addShutdownHook(factory, subscriberMonitor, actServer);
             LOGGER.info("Act started");
             actServer.blockUntilShutdown();
         } catch (Throwable e) {
@@ -71,14 +90,17 @@ public class ActMain {
         }
     }
 
-    private static void addShutdownHook(CommonFactory commonFactory, ActServer actServer) {
+    private static void addShutdownHook(CommonFactory commonFactory, SubscriberMonitor subscriberMonitor, ActServer actServer) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 LOGGER.info("Act is terminating");
                 commonFactory.close();
+                subscriberMonitor.unsubscribe();
                 actServer.stop();
             } catch (InterruptedException e) {
                 LOGGER.error("gRPC server shutdown is interrupted", e);
+            } catch (Exception e) {
+                LOGGER.error("Could not stop subscriber", e);
             } finally {
                 LOGGER.info("Act terminated");
             }

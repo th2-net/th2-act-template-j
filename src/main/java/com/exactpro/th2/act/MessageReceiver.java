@@ -12,35 +12,30 @@
  */
 package com.exactpro.th2.act;
 
-import java.io.IOException;
+import com.exactpro.th2.infra.grpc.Message;
+import com.exactpro.th2.infra.grpc.MessageBatch;
+import com.exactpro.th2.schema.message.MessageListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.exactpro.th2.infra.grpc.Message;
-import com.exactpro.th2.infra.grpc.MessageBatch;
-import com.exactpro.th2.schema.message.MessageRouter;
-import com.exactpro.th2.schema.message.SubscriberMonitor;
-
 public class MessageReceiver implements AutoCloseable {
-    public static final String IN_ATTRIBUTE_NAME = "first";
-    public static final String OE_ATTRIBUTE_NAME = "oe";
-    public static final String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
-    private final SubscriberMonitor subscriberMonitor;
+    private final List<MessageListener<MessageBatch>> callbackList;
+    private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
     private final CheckRule checkRule;
     private final Lock responseLock = new ReentrantLock();
     private final Condition responseReceivedCondition = responseLock.newCondition();
 
     //FIXME: Add queue name
-    public MessageReceiver(MessageRouter<MessageBatch> router, CheckRule checkRule) {
-        long startTime = System.currentTimeMillis();
-
-        subscriberMonitor = router.subscribeAll(this::processIncomingMessages, IN_ATTRIBUTE_NAME, OE_ATTRIBUTE_NAME, SUBSCRIBE_ATTRIBUTE_NAME);
+    public MessageReceiver(List<MessageListener<MessageBatch>> callbackList, CheckRule checkRule) {
+        this.callbackList = callbackList;
+        this.callbackList.add(callback);
         this.checkRule = checkRule;
         //logger.info("Receiver is created with MQ configuration, queue name '{}' during '{}'", messageQueue,  System.currentTimeMillis() - startTime);
 
@@ -62,13 +57,7 @@ public class MessageReceiver implements AutoCloseable {
     }
 
     public void close() {
-        try {
-            if (subscriberMonitor != null) {
-                subscriberMonitor.unsubscribe();
-            }
-        } catch (Exception e) {
-            logger.error("Could not stop subscriber", e);
-        }
+        this.callbackList.remove(callback);
     }
 
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {
