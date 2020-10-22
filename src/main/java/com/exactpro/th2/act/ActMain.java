@@ -35,7 +35,10 @@ import static com.exactpro.th2.ConfigurationUtils.safeLoad;
 
 public class ActMain {
 
-    private final static Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
+    public static final String FIRST_ATTRIBUTE_NAME = "first";
+    public static final String OE_ATTRIBUTE_NAME = "oe";
+    public static final String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
 
     /**
      * Environment variables:
@@ -58,18 +61,15 @@ public class ActMain {
                 factory = CommonFactory.createFromArguments(args);
             } catch (ParseException e) {
                 factory = new CommonFactory();
-                LOGGER.warn("Can not create common factory from arguments");
+                LOGGER.warn("Can not create common factory from arguments", e);
             }
 
             GrpcRouter grpcRouter = factory.getGrpcRouter();
 
             MessageRouter<MessageBatch> messageRouterParsedBatch = factory.getMessageRouterParsedBatch();
 
-            String FIRST_ATTRIBUTE_NAME = "first";
-            String OE_ATTRIBUTE_NAME = "oe";
-            String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
             List<MessageListener<MessageBatch>> callbackList = new CopyOnWriteArrayList<>();
-            SubscriberMonitor subscriberMonitor = messageRouterParsedBatch.subscribeAll((String consumingTag, MessageBatch batch) ->
+            SubscriberMonitor subscriberMonitor = messageRouterParsedBatch.subscribeAll((consumingTag, batch) ->
                     callbackList.forEach(callback -> {
                         try {
                             callback.handler(consumingTag, batch);
@@ -92,18 +92,23 @@ public class ActMain {
 
     private static void addShutdownHook(CommonFactory commonFactory, SubscriberMonitor subscriberMonitor, ActServer actServer) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            LOGGER.info("Act is terminating");
             try {
-                LOGGER.info("Act is terminating");
                 commonFactory.close();
+            } finally {
+                LOGGER.info("CommonFactory closed");
+            }
+            try {
                 subscriberMonitor.unsubscribe();
+            } catch (Exception e) {
+                LOGGER.error("Could not stop subscriber", e);
+            }
+            try {
                 actServer.stop();
             } catch (InterruptedException e) {
                 LOGGER.error("gRPC server shutdown is interrupted", e);
-            } catch (Exception e) {
-                LOGGER.error("Could not stop subscriber", e);
-            } finally {
-                LOGGER.info("Act terminated");
             }
+            LOGGER.info("Act terminated");
         }));
     }
 
