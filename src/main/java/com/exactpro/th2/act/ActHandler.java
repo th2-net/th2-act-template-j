@@ -16,6 +16,7 @@
 package com.exactpro.th2.act;
 
 import static com.datastax.driver.core.utils.UUIDs.timeBased;
+import static com.exactpro.th2.common.event.Event.*;
 import static com.exactpro.th2.common.event.Event.Status.*;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
@@ -37,6 +38,7 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.estore.grpc.Response;
 import com.exactpro.th2.common.grpc.*;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -283,7 +285,7 @@ public class ActHandler extends ActImplBase {
     private StoreEventRequest createAndStoreParentEvent(PlaceMessageRequestOrBuilder request, String actName, Status status) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
 
-        com.exactpro.th2.common.event.Event event = com.exactpro.th2.common.event.Event.start()
+        com.exactpro.th2.common.event.Event event = start()
                 .name(actName + ' ' + request.getConnectionId().getSessionAlias())
                 .description(request.getDescription())
                 .type(actName)
@@ -399,13 +401,11 @@ public class ActHandler extends ActImplBase {
             RabbitMqMessageSender messageSender, EventID parentEventId) throws IOException {
         try {
             logger.debug("Send message start");
-            Timestamp start = getTimestamp(Instant.now());
             messageSender.send(Message.newBuilder(request.getMessage())
                     .setParentEventId(parentEventId)
                     .build());
-            Timestamp end = getTimestamp(Instant.now());
             //TODO remove after solving issue TH2-217
-            StoreEventRequest sendMessageEvent = createSendMessageEvent(request, start, end, parentEventId);
+            StoreEventRequest sendMessageEvent = createSendMessageEvent(request, parentEventId.getId());
             //TODO process response
             eventStoreConnector.storeEvent(sendMessageEvent);
         } finally {
@@ -420,20 +420,15 @@ public class ActHandler extends ActImplBase {
                 .build();
     }
 
-    private StoreEventRequest createSendMessageEvent(PlaceMessageRequest request,
-            Timestamp start,
-            Timestamp end,
-            EventID parentEventId) {
+    private StoreEventRequest createSendMessageEvent(PlaceMessageRequest request, String parentEventId) throws JsonProcessingException {
+        com.exactpro.th2.common.event.Event event = start()
+                .name("Send '" + request.getMessage().getMetadata().getMessageType() + "' message");
+        TreeTable parametersTable = EventUtils.toTreeTable(request.getMessage());
+        event.status(Status.PASSED);
+        event.bodyData(parametersTable);
+        event.type(parametersTable.getType());
         return StoreEventRequest.newBuilder()
-                .setEvent(Event.newBuilder().setId(newEventId())
-                .setParentId(parentEventId)
-                .setName("Send '" + request.getMessage().getMetadata().getMessageType() + "' message")
-                .setType("sendMessage")
-                .setStartTimestamp(start)
-                .setEndTimestamp(end)
-                .setStatus(EventStatus.SUCCESS)
-                .setBody(convertMessageToEvent(request.getMessage(), request.getConnectionId().getSessionAlias()))
-                        .build())
+                .setEvent(event.toProtoEvent(parentEventId))
                 .build();
     }
 
