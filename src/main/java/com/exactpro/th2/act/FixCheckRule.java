@@ -46,7 +46,8 @@ public class FixCheckRule implements CheckRule {
         if (expectedMessageTypes.contains(messageType)) {
             if(logger.isDebugEnabled()) { logger.debug("check the message: " + TextFormat.shortDebugString(message)); }
             if (checkExpectedField(message)) {
-                response.set(message);
+                // we need to return the first match to the filter
+                response.compareAndSet(null, message);
                 logger.debug("FixCheckRule passed on {} messageType", messageType);
                 return true;
             }
