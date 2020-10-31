@@ -44,10 +44,9 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:bom:2.0.+')
+        api platform('com.exactpro.th2:bom:2.1.+')
 
         implementation "com.exactpro.th2:grpc-common"
-        implementation "com.exactpro.th2:grpc-estore"
     }
 
     jar {
@@ -122,9 +121,8 @@ dependencies {
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
 
-    implementation "org.jetbrains:annotations"
-
-    implementation "org.apache.commons:commons-lang3"
+    implementation "com.exactpro.th2:th2-grpc-verifier"
+    implementation "com.exactpro.th2:th2-grpc-connectivity"
 
     implementation "com.datastax.cassandra:cassandra-driver-core:3.6.0" //FIXME: Migrate to another library for UUID
 

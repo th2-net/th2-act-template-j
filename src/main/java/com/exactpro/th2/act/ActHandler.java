@@ -17,89 +17,93 @@ package com.exactpro.th2.act;
 
 import static com.datastax.driver.core.utils.UUIDs.timeBased;
 import static com.exactpro.th2.common.event.Event.*;
-import static com.exactpro.th2.common.event.Event.Status.*;
+import static com.exactpro.th2.common.event.Event.Status.PASSED;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
 import static com.google.protobuf.TextFormat.shortDebugString;
-import static io.grpc.ManagedChannelBuilder.forAddress;
 import static java.lang.String.format;
-import static java.nio.charset.StandardCharsets.*;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.Instant.ofEpochMilli;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.estore.grpc.Response;
 import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.schema.message.MessageListener;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.RabbitMqMessageSender;
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.common.event.Event.Status;
-import com.exactpro.th2.configuration.MicroserviceConfiguration;
-import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.configuration.Th2Configuration;
-import com.exactpro.th2.configuration.Th2Configuration.QueueNames;
-import com.exactpro.th2.estore.grpc.EventStoreServiceGrpc;
-import com.exactpro.th2.estore.grpc.EventStoreServiceGrpc.EventStoreServiceBlockingStub;
-import com.exactpro.th2.estore.grpc.StoreEventRequest;
+import com.exactpro.th2.common.grpc.Checkpoint;
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.Event;
+import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.grpc.EventID;
+import com.exactpro.th2.common.grpc.EventStatus;
+import com.exactpro.th2.common.grpc.ListValueOrBuilder;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.RequestStatus;
+import com.exactpro.th2.common.grpc.Value;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
-import com.exactpro.th2.check1.grpc.VerifierGrpc;
-import com.exactpro.th2.check1.grpc.VerifierGrpc.VerifierBlockingStub;
+import com.exactpro.th2.check1.grpc.VerifierService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
+import com.google.protobuf.util.JsonFormat;
 
 import io.grpc.Context;
 import io.grpc.Deadline;
-import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
-    private final Map<String, ConnectivityContext> connectivityIdToContext = new HashMap<>();
-    private final ManagedChannel verifierChannel;
-    private final ManagedChannel eventChannel;
-    private final VerifierBlockingStub verifierConnector;
-    private final EventStoreServiceBlockingStub eventStoreConnector;
-    private final RabbitMQConfiguration rabbitMQconfiguration;
 
-    ActHandler(MicroserviceConfiguration configuration) {
-        Th2Configuration th2Configuration = configuration.getTh2();
-        this.rabbitMQconfiguration = configuration.getRabbitMQ();
-        this.verifierChannel = forAddress(th2Configuration.getTh2VerifierGRPCHost(), th2Configuration.getTh2VerifierGRPCPort()).usePlaintext().build();
-        this.verifierConnector = VerifierGrpc.newBlockingStub(verifierChannel);
-        this.eventChannel = forAddress(th2Configuration.getTh2EventStorageGRPCHost(), th2Configuration.getTh2EventStorageGRPCPort()).usePlaintext().build();
-        this.eventStoreConnector = EventStoreServiceGrpc.newBlockingStub(eventChannel);
-        createConnectivityContexts(configuration);
+    private final VerifierService verifierConnector;
+    private final MessageRouter<EventBatch> eventBatchMessageRouter;
+    private final MessageRouter<MessageBatch> messageRouter;
+    private final List<MessageListener<MessageBatch>> callbackList;
+
+    ActHandler(CommonFactory factory, MessageRouter<MessageBatch> router, List<MessageListener<MessageBatch>> callbackList) throws ClassNotFoundException {
+        this.messageRouter = router;
+        this.eventBatchMessageRouter = factory.getEventBatchRouter();
+        this.verifierConnector = factory.getGrpcRouter().getService(VerifierService.class);
+        this.callbackList = callbackList;
     }
 
     @Override
     public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
-            if(logger.isDebugEnabled()) { logger.debug("placeOrderFIX request: " + shortDebugString(request)); }
+            if (logger.isDebugEnabled()) {
+                logger.debug("placeOrderFIX request: " + shortDebugString(request));
+            }
             placeMessage(request, responseObserver, "NewOrderSingle", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
@@ -114,9 +118,9 @@ public class ActHandler extends ActImplBase {
     public void sendMessage(PlaceMessageRequest request, StreamObserver<SendMessageResponse> responseObserver) {
         long startPlaceMessage = System.currentTimeMillis();
         try {
-            if(logger.isDebugEnabled()) { logger.debug("Send message request: " + shortDebugString(request)); }
-
-            ConnectivityContext connectivityContext = getConnectivityContext(request);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Send message request: " + shortDebugString(request));
+            }
 
             String actName = "sendMessage";
             // FIXME store parent with fail in case of children fail
@@ -130,7 +134,7 @@ public class ActHandler extends ActImplBase {
                 sendMessageErrorResponse(responseObserver, "Cancelled by client");
             }
 
-            sendMessage(request, connectivityContext.getMessageSender(), parentId);
+            sendMessage(request, parentId);
 
             SendMessageResponse response = SendMessageResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
@@ -225,47 +229,40 @@ public class ActHandler extends ActImplBase {
     }
 
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-            String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+                              String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+
         long startPlaceMessage = System.currentTimeMillis();
         EventID parentId = request.getParentEventId();
-        try {
-            checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
-            CheckRule checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes);
+        ConnectionID requestConnId = request.getConnectionId();
+        checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
+        var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
 
-            ConnectivityContext connectivityContext = getConnectivityContext(request);
+        // FIXME store parent with fail in case of children fail
+        StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
+        parentId = storeEventRequest.getEvent().getId();
 
-            // FIXME store parent with fail in case of children fail
-            StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
-            parentId = storeEventRequest.getEvent().getId();
+        Checkpoint checkpoint = registerCheckPoint(parentId);
 
-            Checkpoint checkpoint = registerCheckPoint(parentId);
-
-            QueueNames queueNames = connectivityContext.getQueueNames();
-            try (MessageReceiver messageReceiver = new MessageReceiver(rabbitMQconfiguration,
-                    "Act:place message",
-                    queueNames.getExchangeName(),
-                    queueNames.getInQueueName(),
-                    checkRule)) {
-                if (isSendPlaceMessage(request, responseObserver, connectivityContext.getMessageSender(), parentId)) {
-                    long startAwaitSync = System.currentTimeMillis();
-                    long timeout = getTimeout(Context.current().getDeadline());
-                    messageReceiver.awaitSync(timeout, MILLISECONDS);
-                    logger.debug("messageReceiver.awaitSync for {} in {} ms",
-                            actName, System.currentTimeMillis() - startAwaitSync);
-                    if (Context.current().isCancelled()) {
-                        logger.warn("'{}' request cancelled by client", actName);
-                        sendErrorResponse(responseObserver, "Cancelled by client");
-                    } else {
-                        processResponseMessage(actName,
-                                responseObserver,
-                                checkpoint,
-                                parentId,
-                                messageReceiver.getResponseMessage(),
-                                timeout);
-                    }
+        try (MessageReceiver messageReceiver = new MessageReceiver(callbackList, checkRule)) {
+            if (isSendPlaceMessage(request, responseObserver, messageRouter, parentId)) {
+                long startAwaitSync = System.currentTimeMillis();
+                long timeout = getTimeout(Context.current().getDeadline());
+                messageReceiver.awaitSync(timeout, MILLISECONDS);
+                logger.debug("messageReceiver.awaitSync for {} in {} ms",
+                        actName, System.currentTimeMillis() - startAwaitSync);
+                if (Context.current().isCancelled()) {
+                    logger.warn("'{}' request cancelled by client", actName);
+                    sendErrorResponse(responseObserver, "Cancelled by client");
+                } else {
+                    processResponseMessage(actName,
+                            responseObserver,
+                            checkpoint,
+                            parentId,
+                            messageReceiver.getResponseMessage(),
+                            timeout);
                 }
             }
-        } catch (RuntimeException | TimeoutException | IOException | InterruptedException e) {
+        } catch (RuntimeException | InterruptedException e) {
             logger.error("'{}' internal error: {}", actName, e.getMessage(), e);
             createAndStoreErrorEvent(actName,
                     e.getMessage(),
@@ -296,51 +293,14 @@ public class ActHandler extends ActImplBase {
                 .setEvent(event.toProtoEvent(request.getParentEventId().getId()))
                 .build();
         //FIXME process response
-        eventStoreConnector.storeEvent(storeEventRequest);
-        logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+        try {
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(storeEventRequest.getEvent()).build(), "publish", "event");
+            logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+        } catch (IOException e) {
+            throw new RuntimeException("Can not send event = " + storeEventRequest.getEvent().getId().getId(), e);
+        }
+
         return storeEventRequest;
-    }
-
-    @NotNull
-    private ConnectivityContext getConnectivityContext(PlaceMessageRequestOrBuilder request) {
-        long startTime = System.currentTimeMillis();
-
-        String connectivityId = request.getConnectionId().getSessionAlias();
-        ConnectivityContext connectivityContext = connectivityIdToContext.get(connectivityId);
-        if (connectivityContext == null) {
-            throw new IllegalArgumentException("Unknown connectivityId '" + connectivityId + '\'');
-        }
-        logger.debug("getConnectivityContext in {} ms", System.currentTimeMillis() - startTime);
-        return connectivityContext;
-    }
-
-    void close() {
-        if (verifierChannel != null) {
-            verifierChannel.shutdownNow();
-        }
-        if (eventChannel != null) {
-            eventChannel.shutdownNow();
-        }
-        connectivityIdToContext.values().forEach(context -> {
-            try {
-                context.getMessageSender().close();
-            } catch (IOException e) {
-                logger.error("Could not close message sender", e);
-            }
-        });
-    }
-
-    private void createConnectivityContexts(MicroserviceConfiguration configuration) {
-        configuration.getTh2().getConnectivityQueueNames().forEach((connectivityId, queueNames) -> {
-            try {
-                logger.debug("id '{}': queueNames {}", connectivityId, queueNames);
-                RabbitMqMessageSender messageSender = new RabbitMqMessageSender(configuration.getRabbitMQ(),
-                        connectivityId, queueNames.getExchangeName(), queueNames.getToSendQueueName());
-                connectivityIdToContext.put(connectivityId, new ConnectivityContext(messageSender, queueNames));
-            } catch (RuntimeException e) {
-                logger.error("Could not create rabbit mq message sender to '{}' connectivity", connectivityId, e);
-            }
-        });
     }
 
     private void processResponseMessage(String actName,
@@ -382,11 +342,11 @@ public class ActHandler extends ActImplBase {
     }
 
     private boolean isSendPlaceMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-            RabbitMqMessageSender messageSender, EventID parentEventId) {
+            MessageRouter<MessageBatch> router, EventID parentEventId) {
         long startTime = System.currentTimeMillis();
 
         try {
-            sendMessage(request, messageSender, parentEventId);
+            sendMessage(request, parentEventId);
             return true;
         } catch (IOException e) {
             logger.error("Could not send message to queue", e);
@@ -397,20 +357,40 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private void sendMessage(PlaceMessageRequest request,
-            RabbitMqMessageSender messageSender, EventID parentEventId) throws IOException {
+    private void sendMessage(PlaceMessageRequest request, EventID parentEventId) throws IOException {
         try {
             logger.debug("Send message start");
-            messageSender.send(Message.newBuilder(request.getMessage())
-                    .setParentEventId(parentEventId)
+            Timestamp start = getTimestamp(Instant.now());
+
+            //May be use in future for filtering
+            //request.getConnectionId().getSessionAlias();
+            Message message = backwardCompatibilityConnectionId(request);
+            messageRouter.send(MessageBatch.newBuilder()
+                    .addMessages(Message.newBuilder(message)
+                            .setParentEventId(parentEventId)
+                            .build())
                     .build());
             //TODO remove after solving issue TH2-217
             StoreEventRequest sendMessageEvent = createSendMessageEvent(request, parentEventId.getId());
             //TODO process response
-            eventStoreConnector.storeEvent(sendMessageEvent);
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent.getEvent()).build(), "publish", "event");
         } finally {
             logger.debug("Send message end");
         }
+    }
+
+    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
+        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
+        if (connectionId != null && !connectionId.getSessionAlias().isEmpty()) {
+            return request.getMessage();
+        }
+        return Message.newBuilder(request.getMessage())
+                .mergeMetadata(MessageMetadata.newBuilder()
+                        .mergeId(MessageID.newBuilder()
+                                .setConnectionId(request.getConnectionId())
+                                .build())
+                        .build())
+                .build();
     }
 
     private static Timestamp getTimestamp(Instant instant) {
@@ -456,10 +436,7 @@ public class ActHandler extends ActImplBase {
             if (logger.isDebugEnabled()) {
                 logger.debug("try to store event: {}", toDebugMessage(eventRequest));
             }
-            Response response = eventStoreConnector.storeEvent(eventRequest);
-            if (response.hasError()) {
-                logger.error("could not store event: {}", response.getError());
-            }
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest.getEvent()).build(), "publish", "event");
         } catch (Exception e) {
             logger.error("could not store event", e);
         }
@@ -534,7 +511,9 @@ public class ActHandler extends ActImplBase {
         CheckpointResponse response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)
                 .build());
-        if (logger.isDebugEnabled()) { logger.debug("Register checkpoint end. Response " + shortDebugString(response)); }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Register checkpoint end. Response " + shortDebugString(response));
+        }
         return response.getCheckpoint();
     }
 
@@ -544,23 +523,5 @@ public class ActHandler extends ActImplBase {
 
     private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
         return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
-    }
-
-    private static class ConnectivityContext {
-        private final RabbitMqMessageSender messageSender;
-        private final QueueNames queueNames;
-
-        public ConnectivityContext(RabbitMqMessageSender messageSender, QueueNames queueNames) {
-            this.messageSender = messageSender;
-            this.queueNames = queueNames;
-        }
-
-        public RabbitMqMessageSender getMessageSender() {
-            return messageSender;
-        }
-
-        public QueueNames getQueueNames() {
-            return queueNames;
-        }
     }
 }
