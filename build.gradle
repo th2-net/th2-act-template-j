@@ -106,12 +106,12 @@ apply plugin: 'com.palantir.docker'
 
 dependencies {
     implementation "com.exactpro.th2:common"
-    implementation "com.exactpro.th2:grpc-act-template:2.0.+"
+    implementation "com.exactpro.th2:grpc-act-template:2.1.+"
     implementation "com.exactpro.th2:grpc-check1"
     implementation "com.exactpro.th2:grpc-common"
 
     // FIXME: temporal. Remove when schema stops creating grpc pin for event store
-    implementation "com.exactpro.th2:th2-grpc-event-store:1.5.0-schema.+"
+    implementation group: 'com.exactpro.th2', name: 'th2-grpc-event-store', version: '1.5.0-schema.+', transitive: false
 
     implementation "com.google.protobuf:protobuf-java-util"
     implementation "io.grpc:grpc-protobuf"
