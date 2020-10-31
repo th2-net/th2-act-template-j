@@ -39,6 +39,8 @@ public class MessageReceiver implements AutoCloseable {
     private final Lock responseLock = new ReentrantLock();
     private final Condition responseReceivedCondition = responseLock.newCondition();
 
+    private volatile Message firstMatch;
+
     public MessageReceiver(RabbitMQConfiguration rabbitMQconfiguration, String subscriber, String exchangeName, String messageQueue, CheckRule checkRule)
             throws IOException, TimeoutException {
         long startTime = System.currentTimeMillis();
@@ -54,6 +56,8 @@ public class MessageReceiver implements AutoCloseable {
 
     public void awaitSync(long timeout, TimeUnit timeUnit) throws InterruptedException {
         if (getResponseMessage() == null) {
+            // TODO: is there any chance to call #signalAboutReceived at this moment?
+            // if it is what will be the result? Will we wait till the timeout exceeded?
             try {
                 responseLock.lock();
                 responseReceivedCondition.await(timeout, timeUnit);
@@ -64,7 +68,7 @@ public class MessageReceiver implements AutoCloseable {
     }
 
     public Message getResponseMessage() {
-        return checkRule.getResponse();
+        return firstMatch;
     }
 
     public void close() {
@@ -82,8 +86,15 @@ public class MessageReceiver implements AutoCloseable {
             MessageBatch batch = MessageBatch.parseFrom(delivery.getBody());
             logger.debug("Message received batch, size {}", batch.getSerializedSize());
             for (Message message : batch.getMessagesList()) {
+                if (hasMatch()) {
+                    logger.debug("The match was already found. Skip batch checking");
+                    break;
+                }
                 if (checkRule.onMessage(message)) {
+                    firstMatch = message;
                     signalAboutReceived();
+                    logger.debug("Found first match '{}'. Skip other messages", message);
+                    break;
                 }
             }
         } catch (InvalidProtocolBufferException e) {
@@ -100,5 +111,9 @@ public class MessageReceiver implements AutoCloseable {
         } finally {
             responseLock.unlock();
         }
+    }
+
+    private boolean hasMatch() {
+        return firstMatch != null;
     }
 }
