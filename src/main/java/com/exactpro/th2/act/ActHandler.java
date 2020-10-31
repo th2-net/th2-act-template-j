@@ -32,16 +32,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.exactpro.th2.common.event.bean.TreeTable;
-import com.exactpro.th2.estore.grpc.Response;
-import com.exactpro.th2.common.grpc.*;
 import com.exactpro.th2.common.schema.message.MessageListener;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
-import org.jetbrains.annotations.NotNull;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,7 +64,6 @@ import com.exactpro.th2.common.grpc.MessageMetadata;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
-import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
@@ -74,9 +72,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
-import com.google.protobuf.util.JsonFormat;
 
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -91,11 +87,16 @@ public class ActHandler extends ActImplBase {
     private final MessageRouter<MessageBatch> messageRouter;
     private final List<MessageListener<MessageBatch>> callbackList;
 
-    ActHandler(CommonFactory factory, MessageRouter<MessageBatch> router, List<MessageListener<MessageBatch>> callbackList) throws ClassNotFoundException {
-        this.messageRouter = router;
-        this.eventBatchMessageRouter = factory.getEventBatchRouter();
-        this.verifierConnector = factory.getGrpcRouter().getService(VerifierService.class);
-        this.callbackList = callbackList;
+    ActHandler(
+            MessageRouter<MessageBatch> router,
+            List<MessageListener<MessageBatch>> callbackList,
+            MessageRouter<EventBatch> eventBatchRouter,
+            VerifierService verifierService
+    ) {
+        this.messageRouter = Objects.requireNonNull(router, "'Router' parameter");
+        this.eventBatchMessageRouter = Objects.requireNonNull(eventBatchRouter, "'Event batch router' parameter");
+        this.verifierConnector = Objects.requireNonNull(verifierService, "'Verifier service' parameter");
+        this.callbackList = Objects.requireNonNull(callbackList, "'Callback list' parameter");
     }
 
     @Override
@@ -124,8 +125,7 @@ public class ActHandler extends ActImplBase {
 
             String actName = "sendMessage";
             // FIXME store parent with fail in case of children fail
-            StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
-            EventID parentId = storeEventRequest.getEvent().getId();
+            EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
 
             Checkpoint checkpoint = registerCheckPoint(parentId);
 
@@ -232,14 +232,12 @@ public class ActHandler extends ActImplBase {
                               String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
-        EventID parentId = request.getParentEventId();
         ConnectionID requestConnId = request.getConnectionId();
         checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
         var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
 
         // FIXME store parent with fail in case of children fail
-        StoreEventRequest storeEventRequest = createAndStoreParentEvent(request, actName, PASSED);
-        parentId = storeEventRequest.getEvent().getId();
+        EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
@@ -279,7 +277,7 @@ public class ActHandler extends ActImplBase {
         return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
     }
 
-    private StoreEventRequest createAndStoreParentEvent(PlaceMessageRequestOrBuilder request, String actName, Status status) throws JsonProcessingException {
+    private EventID createAndStoreParentEvent(PlaceMessageRequestOrBuilder request, String actName, Status status) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
 
         com.exactpro.th2.common.event.Event event = start()
@@ -289,18 +287,15 @@ public class ActHandler extends ActImplBase {
                 .status(status)
                 .endTimestamp(); // FIXME set properly as is in the last child
 
-        StoreEventRequest storeEventRequest = StoreEventRequest.newBuilder()
-                .setEvent(event.toProtoEvent(request.getParentEventId().getId()))
-                .build();
+        Event protoEvent = event.toProtoEvent(request.getParentEventId().getId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(storeEventRequest.getEvent()).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(protoEvent).build(), "publish", "event");
             logger.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+            return protoEvent.getId();
         } catch (IOException e) {
-            throw new RuntimeException("Can not send event = " + storeEventRequest.getEvent().getId().getId(), e);
+            throw new RuntimeException("Can not send event = " + protoEvent.getId().getId(), e);
         }
-
-        return storeEventRequest;
     }
 
     private void processResponseMessage(String actName,
@@ -319,8 +314,7 @@ public class ActHandler extends ActImplBase {
                     parentEventId);
             sendErrorResponse(responseObserver, message);
         } else {
-            storeEvent(StoreEventRequest.newBuilder()
-                    .setEvent(Event.newBuilder().setId(newEventId())
+            storeEvent(Event.newBuilder().setId(newEventId())
                             .setParentId(parentEventId)
                             .setName(format("Received '%s' response message", responseMessage.getMetadata().getMessageType()))
                             .setType("message")
@@ -328,8 +322,7 @@ public class ActHandler extends ActImplBase {
                             .setEndTimestamp(getTimestamp(Instant.now()))
                             .setStatus(EventStatus.SUCCESS)
                             .addAttachedMessageIds(responseMessage.getMetadata().getId())
-                            .build())
-                    .build());
+                            .build());
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage)
                     .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
@@ -371,9 +364,9 @@ public class ActHandler extends ActImplBase {
                             .build())
                     .build());
             //TODO remove after solving issue TH2-217
-            StoreEventRequest sendMessageEvent = createSendMessageEvent(request, parentEventId.getId());
+            Event sendMessageEvent = createSendMessageEvent(request, parentEventId.getId());
             //TODO process response
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent.getEvent()).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(sendMessageEvent).build(), "publish", "event");
         } finally {
             logger.debug("Send message end");
         }
@@ -400,16 +393,14 @@ public class ActHandler extends ActImplBase {
                 .build();
     }
 
-    private StoreEventRequest createSendMessageEvent(PlaceMessageRequest request, String parentEventId) throws JsonProcessingException {
+    private Event createSendMessageEvent(PlaceMessageRequest request, String parentEventId) throws JsonProcessingException {
         com.exactpro.th2.common.event.Event event = start()
                 .name("Send '" + request.getMessage().getMetadata().getMessageType() + "' message");
         TreeTable parametersTable = EventUtils.toTreeTable(request.getMessage());
         event.status(Status.PASSED);
         event.bodyData(parametersTable);
         event.type(parametersTable.getType());
-        return StoreEventRequest.newBuilder()
-                .setEvent(event.toProtoEvent(parentEventId))
-                .build();
+        return event.toProtoEvent(parentEventId);
     }
 
     private void createAndStoreErrorEvent(String actName, String message,
@@ -417,8 +408,7 @@ public class ActHandler extends ActImplBase {
                                                Timestamp end,
                                                EventID parentEventId) {
 
-        StoreEventRequest errorEvent = StoreEventRequest.newBuilder()
-                    .setEvent(Event.newBuilder().setId(newEventId())
+        Event errorEvent = Event.newBuilder().setId(newEventId())
                             .setParentId(parentEventId)
                             .setName(format("Internal %s error", actName))
                             .setType("Error")
@@ -426,32 +416,18 @@ public class ActHandler extends ActImplBase {
                             .setEndTimestamp(end)
                             .setStatus(EventStatus.FAILED)
                             .setBody(ByteString.copyFrom(format("{\"message\": \"%s\"}", message), UTF_8))
-                            .build())
-                    .build();
+                            .build();
         storeEvent(errorEvent);
     }
 
-    private void storeEvent(StoreEventRequest eventRequest) {
+    private void storeEvent(Event eventRequest) {
         try {
             if (logger.isDebugEnabled()) {
                 logger.debug("try to store event: {}", toDebugMessage(eventRequest));
             }
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest.getEvent()).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event");
         } catch (Exception e) {
             logger.error("could not store event", e);
-        }
-    }
-
-    private ByteString convertMessageToEvent(Message message, String connectivityId) {
-        SendMessageEvent messageEvent = new SendMessageEvent();
-        messageEvent.setConnectivityId(connectivityId);
-        messageEvent.setMessageName(message.getMetadata().getMessageType());
-        messageEvent.setFields(convertMessage(message));
-        try {
-            return ByteString.copyFrom(new ObjectMapper().writeValueAsBytes(messageEvent));
-        } catch (JsonProcessingException e) {
-            logger.error("Could not convert Message to json", e);
-            return ByteString.EMPTY;
         }
     }
 

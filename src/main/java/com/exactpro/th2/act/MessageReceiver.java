@@ -15,9 +15,9 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.infra.grpc.Message;
-import com.exactpro.th2.infra.grpc.MessageBatch;
-import com.exactpro.th2.schema.message.MessageListener;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.schema.message.MessageListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

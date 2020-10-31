@@ -15,23 +15,18 @@
  */
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.configuration.MicroserviceConfiguration;
-import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.configuration.Th2Configuration;
-import com.exactpro.th2.infra.grpc.MessageBatch;
-import com.exactpro.th2.schema.factory.CommonFactory;
-import com.exactpro.th2.schema.grpc.router.GrpcRouter;
-import com.exactpro.th2.schema.message.MessageListener;
-import com.exactpro.th2.schema.message.MessageRouter;
-import com.exactpro.th2.schema.message.SubscriberMonitor;
-import org.apache.commons.cli.ParseException;
+import com.exactpro.th2.check1.grpc.VerifierService;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import com.exactpro.th2.common.schema.message.MessageRouter;
+import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-
-import static com.exactpro.th2.ConfigurationUtils.safeLoad;
 
 public class ActMain {
 
@@ -40,26 +35,12 @@ public class ActMain {
     public static final String OE_ATTRIBUTE_NAME = "oe";
     public static final String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
 
-    /**
-     * Environment variables:
-     *  {@link com.exactpro.th2.configuration.Configuration#ENV_GRPC_PORT}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_HOST}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_PORT}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_USER}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_PASS}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_VHOST}
-     *  {@link Th2Configuration#ENV_RABBITMQ_EXCHANGE_NAME_TH2_CONNECTIVITY}
-     *  {@link Th2Configuration#ENV_TH2_VERIFIER_GRPC_HOST}
-     *  {@link Th2Configuration#ENV_TH2_VERIFIER_GRPC_PORT}
-     *  {@link Th2Configuration#ENV_TH2_EVENT_STORAGE_GRPC_HOST}
-     *  {@link Th2Configuration#ENV_TH2_EVENT_STORAGE_GRPC_PORT}
-     */
     public static void main(String[] args) {
         try {
             CommonFactory factory;
             try {
                 factory = CommonFactory.createFromArguments(args);
-            } catch (ParseException e) {
+            } catch (Exception e) {
                 factory = new CommonFactory();
                 LOGGER.warn("Can not create common factory from arguments", e);
             }
@@ -79,7 +60,12 @@ public class ActMain {
                     }),
                     FIRST_ATTRIBUTE_NAME, OE_ATTRIBUTE_NAME, SUBSCRIBE_ATTRIBUTE_NAME);
 
-            ActHandler actHandler = new ActHandler(factory, messageRouterParsedBatch, callbackList);
+            ActHandler actHandler = new ActHandler(
+                    messageRouterParsedBatch,
+                    callbackList,
+                    factory.getEventBatchRouter(),
+                    factory.getGrpcRouter().getService(VerifierService.class)
+            );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             addShutdownHook(factory, subscriberMonitor, actServer);
             LOGGER.info("Act started");
@@ -110,13 +96,5 @@ public class ActMain {
             }
             LOGGER.info("Act terminated");
         }));
-    }
-
-    private static MicroserviceConfiguration readConfiguration(String[] args) {
-        MicroserviceConfiguration configuration = args.length > 0
-                ? safeLoad(MicroserviceConfiguration::load, MicroserviceConfiguration::new, args[0])
-                : new MicroserviceConfiguration();
-        LOGGER.info("Loading act with configuration: {}", configuration);
-        return configuration;
     }
 }

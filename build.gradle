@@ -116,13 +116,8 @@ dependencies {
     implementation "io.grpc:grpc-core"
     implementation "io.grpc:grpc-netty"
 
-    implementation "com.rabbitmq:amqp-client"
-
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
-
-    implementation "com.exactpro.th2:th2-grpc-verifier"
-    implementation "com.exactpro.th2:th2-grpc-connectivity"
 
     implementation "com.datastax.cassandra:cassandra-driver-core:3.6.0" //FIXME: Migrate to another library for UUID
 
