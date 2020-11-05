@@ -15,7 +15,7 @@
  */
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.check1.grpc.VerifierService;
+import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
@@ -64,7 +64,7 @@ public class ActMain {
                     messageRouterParsedBatch,
                     callbackList,
                     factory.getEventBatchRouter(),
-                    factory.getGrpcRouter().getService(VerifierService.class)
+                    factory.getGrpcRouter().getService(Check1Service.class)
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             addShutdownHook(factory, subscriberMonitor, actServer);

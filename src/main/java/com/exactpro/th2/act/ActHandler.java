@@ -66,7 +66,7 @@ import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
-import com.exactpro.th2.check1.grpc.VerifierService;
+import com.exactpro.th2.check1.grpc.Check1Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Timestamp;
@@ -79,7 +79,7 @@ public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
 
-    private final VerifierService verifierConnector;
+    private final Check1Service verifierConnector;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<MessageBatch> messageRouter;
     private final List<MessageListener<MessageBatch>> callbackList;
@@ -88,7 +88,7 @@ public class ActHandler extends ActImplBase {
             MessageRouter<MessageBatch> router,
             List<MessageListener<MessageBatch>> callbackList,
             MessageRouter<EventBatch> eventBatchRouter,
-            VerifierService verifierService
+            Check1Service verifierService
     ) {
         this.messageRouter = Objects.requireNonNull(router, "'Router' parameter");
         this.eventBatchMessageRouter = Objects.requireNonNull(eventBatchRouter, "'Event batch router' parameter");
