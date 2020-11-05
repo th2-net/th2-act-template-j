@@ -15,42 +15,52 @@
  */
 package com.exactpro.th2.act;
 
+import static com.exactpro.th2.common.metrics.CommonMetrics.setLiveness;
+import static com.exactpro.th2.common.metrics.CommonMetrics.setReadiness;
+
+import java.util.Deque;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
 import com.exactpro.th2.common.schema.message.MessageListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
+import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ActMain {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
-    public static final String FIRST_ATTRIBUTE_NAME = "first";
-    public static final String OE_ATTRIBUTE_NAME = "oe";
-    public static final String SUBSCRIBE_ATTRIBUTE_NAME = "subscribe";
+    private static final String OE_ATTRIBUTE_NAME = "oe";
 
     public static void main(String[] args) {
+        Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
+        ReentrantLock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+
+        configureShutdownHook(resources, lock, condition);
         try {
-            CommonFactory factory;
-            try {
-                factory = CommonFactory.createFromArguments(args);
-            } catch (Exception e) {
-                factory = new CommonFactory();
-                LOGGER.warn("Can not create common factory from arguments", e);
-            }
+            setLiveness(true);
+            CommonFactory factory = CommonFactory.createFromArguments(args);
+            resources.add(factory);
 
             GrpcRouter grpcRouter = factory.getGrpcRouter();
+            resources.add(grpcRouter);
 
-            MessageRouter<MessageBatch> messageRouterParsedBatch = factory.getMessageRouterParsedBatch();
+            MessageRouter<MessageBatch> messageRouter = factory.getMessageRouterParsedBatch();
+            resources.add(messageRouter);
 
             List<MessageListener<MessageBatch>> callbackList = new CopyOnWriteArrayList<>();
-            SubscriberMonitor subscriberMonitor = messageRouterParsedBatch.subscribeAll((consumingTag, batch) ->
+            SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll((consumingTag, batch) ->
                     callbackList.forEach(callback -> {
                         try {
                             callback.handler(consumingTag, batch);
@@ -58,43 +68,62 @@ public class ActMain {
                             LOGGER.error("Could not process incoming message", e);
                         }
                     }),
-                    FIRST_ATTRIBUTE_NAME, OE_ATTRIBUTE_NAME, SUBSCRIBE_ATTRIBUTE_NAME);
+                    QueueAttribute.FIRST.toString(), OE_ATTRIBUTE_NAME);
+            resources.add(subscriberMonitor::unsubscribe);
 
             ActHandler actHandler = new ActHandler(
-                    messageRouterParsedBatch,
+                    messageRouter,
                     callbackList,
                     factory.getEventBatchRouter(),
-                    factory.getGrpcRouter().getService(Check1Service.class)
+                    grpcRouter.getService(Check1Service.class)
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
-            addShutdownHook(factory, subscriberMonitor, actServer);
+            resources.add(actServer::stop);
+            setReadiness(true);
             LOGGER.info("Act started");
-            actServer.blockUntilShutdown();
-        } catch (Throwable e) {
-            LOGGER.error("Exit the program, caused by: {}", e.getMessage(), e);
-            System.exit(-1);
+            awaitShutdown(lock, condition);
+        } catch (InterruptedException e) {
+            LOGGER.info("The main thread interupted", e);
+        } catch (Exception e) {
+            LOGGER.error("Fatal error: {}", e.getMessage(), e);
+            System.exit(1);
         }
     }
 
-    private static void addShutdownHook(CommonFactory commonFactory, SubscriberMonitor subscriberMonitor, ActServer actServer) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOGGER.info("Act is terminating");
-            try {
-                commonFactory.close();
-            } finally {
-                LOGGER.info("CommonFactory closed");
+    private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {
+        try {
+            lock.lock();
+            LOGGER.info("Wait shutdown");
+            condition.await();
+            LOGGER.info("App shutdowned");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
+        Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
+            @Override
+            public void run() {
+                LOGGER.info("Shutdown start");
+                setReadiness(false);
+                try {
+                    lock.lock();
+                    condition.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+
+                resources.descendingIterator().forEachRemaining(resource -> {
+                    try {
+                        resource.close();
+                    } catch (Exception e) {
+                        LOGGER.error(e.getMessage(), e);
+                    }
+                });
+                setLiveness(false);
+                LOGGER.info("Shutdown end");
             }
-            try {
-                subscriberMonitor.unsubscribe();
-            } catch (Exception e) {
-                LOGGER.error("Could not stop subscriber", e);
-            }
-            try {
-                actServer.stop();
-            } catch (InterruptedException e) {
-                LOGGER.error("gRPC server shutdown is interrupted", e);
-            }
-            LOGGER.info("Act terminated");
-        }));
+        });
     }
 }
