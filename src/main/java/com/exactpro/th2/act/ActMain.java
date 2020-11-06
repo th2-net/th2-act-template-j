@@ -1,4 +1,4 @@
-/******************************************************************************
+/*
  * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,68 +12,118 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.configuration.MicroserviceConfiguration;
-import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.configuration.Th2Configuration;
+import static com.exactpro.th2.common.metrics.CommonMetrics.setLiveness;
+import static com.exactpro.th2.common.metrics.CommonMetrics.setReadiness;
+
+import java.util.Deque;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.exactpro.th2.ConfigurationUtils.safeLoad;
+import com.exactpro.th2.check1.grpc.Check1Service;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import com.exactpro.th2.common.schema.message.MessageRouter;
+import com.exactpro.th2.common.schema.message.QueueAttribute;
+import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 
 public class ActMain {
 
-    private final static Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
+    private static final String OE_ATTRIBUTE_NAME = "oe";
 
-    /**
-     * Environment variables:
-     *  {@link com.exactpro.th2.configuration.Configuration#ENV_GRPC_PORT}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_HOST}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_PORT}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_USER}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_PASS}
-     *  {@link RabbitMQConfiguration#ENV_RABBITMQ_VHOST}
-     *  {@link Th2Configuration#ENV_RABBITMQ_EXCHANGE_NAME_TH2_CONNECTIVITY}
-     *  {@link Th2Configuration#ENV_TH2_VERIFIER_GRPC_HOST}
-     *  {@link Th2Configuration#ENV_TH2_VERIFIER_GRPC_PORT}
-     *  {@link Th2Configuration#ENV_TH2_EVENT_STORAGE_GRPC_HOST}
-     *  {@link Th2Configuration#ENV_TH2_EVENT_STORAGE_GRPC_PORT}
-     */
     public static void main(String[] args) {
+        Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
+        ReentrantLock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+
+        configureShutdownHook(resources, lock, condition);
         try {
-            MicroserviceConfiguration configuration = readConfiguration(args);
-            ActHandler actHandler = new ActHandler(configuration);
-            ActServer actServer = new ActServer(configuration.getPort(), actHandler);
-            addShutdownHook(actHandler, actServer);
-            LOGGER.info("Act started on {} port", configuration.getPort());
-            actServer.blockUntilShutdown();
-        } catch (Throwable e) {
-            LOGGER.error("Exit the program, caused by: {}", e.getMessage(), e);
-            System.exit(-1);
+            setLiveness(true);
+            CommonFactory factory = CommonFactory.createFromArguments(args);
+            resources.add(factory);
+
+            GrpcRouter grpcRouter = factory.getGrpcRouter();
+            resources.add(grpcRouter);
+
+            MessageRouter<MessageBatch> messageRouter = factory.getMessageRouterParsedBatch();
+            resources.add(messageRouter);
+
+            List<MessageListener<MessageBatch>> callbackList = new CopyOnWriteArrayList<>();
+            SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll((consumingTag, batch) ->
+                    callbackList.forEach(callback -> {
+                        try {
+                            callback.handler(consumingTag, batch);
+                        } catch (Exception e) {
+                            LOGGER.error("Could not process incoming message", e);
+                        }
+                    }),
+                    QueueAttribute.FIRST.toString(), OE_ATTRIBUTE_NAME);
+            resources.add(subscriberMonitor::unsubscribe);
+
+            ActHandler actHandler = new ActHandler(
+                    messageRouter,
+                    callbackList,
+                    factory.getEventBatchRouter(),
+                    grpcRouter.getService(Check1Service.class)
+            );
+            ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
+            resources.add(actServer::stop);
+            setReadiness(true);
+            LOGGER.info("Act started");
+            awaitShutdown(lock, condition);
+        } catch (InterruptedException e) {
+            LOGGER.info("The main thread interupted", e);
+        } catch (Exception e) {
+            LOGGER.error("Fatal error: {}", e.getMessage(), e);
+            System.exit(1);
         }
     }
 
-    private static void addShutdownHook(ActHandler actHandler, ActServer actServer) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                LOGGER.info("Act is terminating");
-                actHandler.close();
-                actServer.stop();
-            } catch (InterruptedException e) {
-                LOGGER.error("gRPC server shutdown is interrupted", e);
-            } finally {
-                LOGGER.info("Act terminated");
-            }
-        }));
+    private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {
+        try {
+            lock.lock();
+            LOGGER.info("Wait shutdown");
+            condition.await();
+            LOGGER.info("App shutdowned");
+        } finally {
+            lock.unlock();
+        }
     }
 
-    private static MicroserviceConfiguration readConfiguration(String[] args) {
-        MicroserviceConfiguration configuration = args.length > 0
-                ? safeLoad(MicroserviceConfiguration::load, MicroserviceConfiguration::new, args[0])
-                : new MicroserviceConfiguration();
-        LOGGER.info("Loading act with configuration: {}", configuration);
-        return configuration;
+    private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
+        Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
+            @Override
+            public void run() {
+                LOGGER.info("Shutdown start");
+                setReadiness(false);
+                try {
+                    lock.lock();
+                    condition.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+
+                resources.descendingIterator().forEachRemaining(resource -> {
+                    try {
+                        resource.close();
+                    } catch (Exception e) {
+                        LOGGER.error(e.getMessage(), e);
+                    }
+                });
+                setLiveness(false);
+                LOGGER.info("Shutdown end");
+            }
+        });
     }
 }

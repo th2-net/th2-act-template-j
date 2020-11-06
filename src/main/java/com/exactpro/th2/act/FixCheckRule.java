@@ -15,10 +15,12 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
+import static com.google.protobuf.TextFormat.shortDebugString;
+
+import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.Value;
-import com.google.protobuf.TextFormat;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,22 +33,25 @@ public class FixCheckRule implements CheckRule {
     private final String expectedFieldName;
     private final String expectedFieldValue;
     private final Set<String> expectedMessageTypes;
+    private final ConnectionID requestConnId;
 
     private final AtomicReference<Message> response = new AtomicReference<>();
 
-    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes) {
+    public FixCheckRule(String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, ConnectionID requestConnId) {
         this.expectedFieldName = expectedFieldName;
         this.expectedFieldValue = expectedFieldValue;
         this.expectedMessageTypes = expectedMessageTypes;
+        this.requestConnId = requestConnId;
     }
 
     @Override
-    public boolean onMessage(Message message) {
-        String messageType = message.getMetadata().getMessageType();
-        if (expectedMessageTypes.contains(messageType)) {
-            if(logger.isDebugEnabled()) { logger.debug("check the message: " + TextFormat.shortDebugString(message)); }
-            if (checkExpectedField(message)) {
-                response.set(message);
+    public boolean onMessage(Message incomingMessage) {
+        String messageType = incomingMessage.getMetadata().getMessageType();
+        if (checkSessionAlias(incomingMessage) && expectedMessageTypes.contains(messageType)) {
+            if(logger.isDebugEnabled()) { logger.debug("check the message: {}", shortDebugString(incomingMessage)); }
+            if (checkExpectedField(incomingMessage)) {
+                // we need to return the first match to the filter
+                response.compareAndSet(null, incomingMessage);
                 logger.debug("FixCheckRule passed on {} messageType", messageType);
                 return true;
             }
@@ -63,4 +68,10 @@ public class FixCheckRule implements CheckRule {
         Value value = message.getFieldsMap().get(expectedFieldName);
         return value != null && expectedFieldValue.equals(value.getSimpleValue());
     }
+
+    private boolean checkSessionAlias(Message message) {
+        var actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
+        return requestConnId.getSessionAlias().equals(actualSessionAlias);
+    }
+
 }

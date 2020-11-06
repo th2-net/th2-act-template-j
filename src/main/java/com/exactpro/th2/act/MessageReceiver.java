@@ -15,45 +15,41 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
-import java.io.IOException;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.exactpro.th2.common.grpc.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.exactpro.th2.RabbitMqSubscriber;
-import com.exactpro.th2.configuration.RabbitMQConfiguration;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.rabbitmq.client.Delivery;
-
 public class MessageReceiver implements AutoCloseable {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
-    private final RabbitMqSubscriber subscriber;
+    private final List<MessageListener<MessageBatch>> callbackList;
+    private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
     private final CheckRule checkRule;
     private final Lock responseLock = new ReentrantLock();
     private final Condition responseReceivedCondition = responseLock.newCondition();
 
-    public MessageReceiver(RabbitMQConfiguration rabbitMQconfiguration, String subscriber, String exchangeName, String messageQueue, CheckRule checkRule)
-            throws IOException, TimeoutException {
-        long startTime = System.currentTimeMillis();
+    private volatile Message firstMatch;
 
+    //FIXME: Add queue name
+    public MessageReceiver(List<MessageListener<MessageBatch>> callbackList, CheckRule checkRule) {
+        this.callbackList = callbackList;
+        this.callbackList.add(callback);
         this.checkRule = checkRule;
-        this.subscriber = new RabbitMqSubscriber(exchangeName, this::processIncomingMessages, null, messageQueue);
-        this.subscriber.startListening(rabbitMQconfiguration.getHost(), rabbitMQconfiguration.getVirtualHost(),
-                rabbitMQconfiguration.getPort(), rabbitMQconfiguration.getUsername(), rabbitMQconfiguration.getPassword(), subscriber);
-
-        logger.info("Receiver is created with MQ configuration, exchange name '{}', queue name {} during {}", exchangeName, messageQueue,  System.currentTimeMillis() - startTime);
+        //logger.info("Receiver is created with MQ configuration, queue name '{}' during '{}'", messageQueue,  System.currentTimeMillis() - startTime);
 
     }
 
     public void awaitSync(long timeout, TimeUnit timeUnit) throws InterruptedException {
         if (getResponseMessage() == null) {
+            // TODO: is there any chance to call #signalAboutReceived at this moment?
+            // if it is what will be the result? Will we wait till the timeout exceeded?
             try {
                 responseLock.lock();
                 responseReceivedCondition.await(timeout, timeUnit);
@@ -64,30 +60,28 @@ public class MessageReceiver implements AutoCloseable {
     }
 
     public Message getResponseMessage() {
-        return checkRule.getResponse();
+        return firstMatch;
     }
 
     public void close() {
-        try {
-            if (subscriber != null) {
-                subscriber.close();
-            }
-        } catch (IOException e) {
-            logger.error("Could not stop subscriber", e);
-        }
+        this.callbackList.remove(callback);
     }
 
-    private void processIncomingMessages(String consumingTag, Delivery delivery) {
+    private void processIncomingMessages(String consumingTag, MessageBatch batch) {
         try {
-            MessageBatch batch = MessageBatch.parseFrom(delivery.getBody());
             logger.debug("Message received batch, size {}", batch.getSerializedSize());
             for (Message message : batch.getMessagesList()) {
+                if (hasMatch()) {
+                    logger.debug("The match was already found. Skip batch checking");
+                    break;
+                }
                 if (checkRule.onMessage(message)) {
+                    firstMatch = message;
                     signalAboutReceived();
+                    logger.debug("Found first match '{}'. Skip other messages", message);
+                    break;
                 }
             }
-        } catch (InvalidProtocolBufferException e) {
-            logger.error("Could not parse proto message", e);
         } catch (RuntimeException e) {
             logger.error("Could not process incoming message", e);
         }
@@ -100,5 +94,9 @@ public class MessageReceiver implements AutoCloseable {
         } finally {
             responseLock.unlock();
         }
+    }
+
+    private boolean hasMatch() {
+        return firstMatch != null;
     }
 }
