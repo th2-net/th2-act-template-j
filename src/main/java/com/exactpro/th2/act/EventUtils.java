@@ -31,41 +31,39 @@ public class EventUtils {
     public static TreeTable toTreeTable(Message message) {
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
         for (Entry<String, Value> fieldEntry : message.getFieldsMap().entrySet()) {
-            treeTableBuilder.row(fieldEntry.getKey(), toTreeTableEntry(fieldEntry.getKey(), fieldEntry.getValue()));
+            treeTableBuilder.row(fieldEntry.getKey(), toTreeTableEntry(fieldEntry.getValue()));
         }
         return treeTableBuilder.build();
     }
 
-    private static TreeTableEntry toTreeTableEntry(String fieldName, Value fieldValue) {
+    private static TreeTableEntry toTreeTableEntry(Value fieldValue) {
         if (fieldValue.hasMessageValue()) {
             Message nestedMessageValue = fieldValue.getMessageValue();
             CollectionBuilder collectionBuilder = new CollectionBuilder();
             for (Entry<String, Value> nestedFieldEntry : nestedMessageValue.getFieldsMap().entrySet()) {
-                collectionBuilder.row(nestedFieldEntry.getKey(), toTreeTableEntry(nestedFieldEntry.getKey(),
+                collectionBuilder.row(nestedFieldEntry.getKey(), toTreeTableEntry(
                         nestedFieldEntry.getValue()));
             }
             return collectionBuilder.build();
-        } else if (fieldValue.hasListValue()) {
+        }
+        if (fieldValue.hasListValue()) {
             int index = 0;
             CollectionBuilder collectionBuilder = new CollectionBuilder();
             for (Value nestedValue : fieldValue.getListValue().getValuesList()) {
                 String nestedName = String.valueOf(index++);
-                collectionBuilder.row(nestedName, toTreeTableEntry(nestedName, nestedValue));
+                collectionBuilder.row(nestedName, toTreeTableEntry(nestedValue));
             }
             return collectionBuilder.build();
-        } else {
-            return new RowBuilder()
-                    .column(new MessageTableColumn(fieldName, fieldValue.toString()))
-                    .build();
         }
+        return new RowBuilder()
+                .column(new MessageTableColumn(fieldValue.getSimpleValue()))
+                .build();
     }
 
     static class MessageTableColumn implements IColumn {
-        public final String fieldName;
         public final String fieldValue;
 
-        public MessageTableColumn(String fieldName, String fieldValue) {
-            this.fieldName = fieldName;
+        public MessageTableColumn(String fieldValue) {
             this.fieldValue = fieldValue;
         }
     }
