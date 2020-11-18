@@ -389,11 +389,11 @@ public class ActHandler extends ActImplBase {
 
     private com.exactpro.th2.common.grpc.Event createSendMessageEvent(PlaceMessageRequest request, String parentEventId) throws JsonProcessingException {
         Event event = start()
-                .name("Send '" + request.getMessage().getMetadata().getMessageType() + "' message");
+                .name("Send '" + request.getMessage().getMetadata().getMessageType() + "' message to connectivity");
         TreeTable parametersTable = EventUtils.toTreeTable(request.getMessage());
         event.status(Status.PASSED);
         event.bodyData(parametersTable);
-        event.type(parametersTable.getType());
+        event.type("Outgoing message");
         return event.toProtoEvent(parentEventId);
     }
 
