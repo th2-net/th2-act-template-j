@@ -1,21 +1,52 @@
 # Overview
-Act component is an active component that sends a message to Connect by MQ, waits for a response message for a specified timeout, and returns the received message to the caller. If no response message is received, Act returns a gRPC error response to the script. Communication with Connect  takes place via a message queue, communication with the script - via gRPC. 
 
-Act sends events about the status of the internal steps to the "Event store" component during request processing. These events are written to the root event associated with this request to Act and, as a result, get into the report on the script run.
+Act is a passive th2 component with parameterised functions which is implemented as parts of the logic test. Script or other components can call these functions via gRPC.
+Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via mq pin. This th2 component type allows for often used logic from script into it and then share it between all th2 components.
+
+This project is implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+
+Most of them consist of the next steps:
+#. Gets a gRPC request with parameters.
+#. Requests checkpoint from check1 via gRPC pin
+#. Sends the passed business message to Connect via mq pin 
+#. Waits the specific business message from Connect during specified timeout 
+#. Returns responded business message with checkpoint
 
 ![picture](scheme.png)
 
-# Configuration
+## Custom resources for infra-mgr
 
-## Environment variables
-- RABBITMQ_PASS=some_pass (***required***)
-- RABBITMQ_HOST=some-host-name-or-ip (***required***)
-- RABBITMQ_PORT=7777 (***required***)
-- RABBITMQ_VHOST=someVhost (***required***)
-- RABBITMQ_USER=some_user (***required***)
-- GRPC_PORT=7878 (***required***)
-- TH2_CONNECTIVITY_QUEUE_NAMES={"fix_client": {"exchangeName":"demo_exchange", "toSendQueueName":"client_to_send", "toSendRawQueueName":"client_to_send_raw", "inQueueName": "fix_codec_out_client", "inRawQueueName": "client_in_raw", "outQueueName": "client_out" , "outRawQueueName": "client_out_raw"  }, "fix_server": {"exchangeName":"demo_exchange", "toSendQueueName":"server_to_send", "toSendRawQueueName":"server_to_send_raw", "inQueueName": "fix_codec_out_server", "inRawQueueName": "server_in_raw", "outQueueName": "server_out" , "outRawQueueName": "server_out_raw"  }} (***required***)
-- TH2_VERIFIER_GRPC_HOST=verify-host-name-or-ip; (***required***)
-- TH2_VERIFIER_GRPC_PORT=9999; (***required***)
-- TH2_EVENT_STORAGE_GRPC_HOST=event-store-host-name-or-ip; (***required***)
-- TH2_EVENT_STORAGE_GRPC_PORT=9999; (***required***)
+```yaml
+apiVersion: th2.exactpro.com/v1
+kind: Th2GenericBox
+spec:
+  type: th2-act
+  pins:
+    - name: grpc_server
+      connection-type: grpc
+    - name: grpc_client_to_check1
+      connection-type: grpc
+    - name: from_codec
+      connection-type: mq
+      attributes: [ "subscribe", "parsed", "first", "oe" ]
+    - name: to_conn1
+      connection-type: mq
+      attributes:
+        - publish
+        - parsed
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn1_session_alias
+              operation: EQUAL
+    - name: to_conn2
+      connection-type: mq
+      attributes:
+        - publish
+        - parsed
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn2_session_alias
+              operation: EQUAL
+```
