@@ -1,11 +1,11 @@
 # Overview
 
-Act is a passive th2 component with parameterised functions which implement parts of test logic. Script or other components can call these functions via gRPC.
-Act can interact with connects, hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via mq pin. This th2 component type allow place often used logic from script into it and then share it between all th2 components.
+Act is a passive th2 component with parameterised functions which is implemented as parts of the logic test. Script or other components can call these functions via gRPC.
+Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via mq pin. This th2 component type allows for often used logic from script into it and then share it between all th2 components.
 
-This project implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+This project is implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
 
-Mous of them consist of the next steps:
+Most of them consist of the next steps:
 #. Gets a gRPC request with parameters.
 #. Requests checkpoint from check1 via gRPC pin
 #. Sends the passed business message to Connect via mq pin 
