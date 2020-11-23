@@ -6,11 +6,11 @@ Act can interact with conn (Connects), hands, check1s, other acts to execute its
 This project is implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
 
 Most of them consist of the next steps:
-#. Gets a gRPC request with parameters.
-#. Requests checkpoint from check1 via gRPC pin
-#. Sends the passed business message to Connect via mq pin 
-#. Waits the specific business message from Connect during specified timeout 
-#. Returns responded business message with checkpoint
+1. Gets a gRPC request with parameters.
+1. Requests checkpoint from check1 via gRPC pin
+1. Sends the passed business message to Connect via mq pin 
+1. Waits the specific business message from Connect during specified timeout 
+1. Returns responded business message with checkpoint
 
 ![picture](scheme.png)
 
