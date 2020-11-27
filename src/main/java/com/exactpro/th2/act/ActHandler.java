@@ -144,7 +144,7 @@ public class ActHandler extends ActImplBase {
             logger.error("Failed to send a message. Message = {}", request.getMessage(), e);
             sendMessageErrorResponse(responseObserver, "Send message failed. See the logs.");
         } finally {
-            logger.debug("Sending message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
+            logger.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
         }
     }
 
@@ -247,7 +247,7 @@ public class ActHandler extends ActImplBase {
                         actName, System.currentTimeMillis() - startAwaitSync);
                 if (Context.current().isCancelled()) {
                     logger.warn("'{}' request cancelled by client", actName);
-                    sendErrorResponse(responseObserver, "Request has been cancelled by client");
+                    sendErrorResponse(responseObserver, "The request has been cancelled by the client");
                 } else {
                     processResponseMessage(actName,
                             responseObserver,
@@ -345,7 +345,7 @@ public class ActHandler extends ActImplBase {
 
     private void sendMessage(PlaceMessageRequest request, EventID parentEventId) throws IOException {
         try {
-            logger.debug("Sending a message started");
+            logger.debug("Sending the message started");
 
             //May be use in future for filtering
             //request.getConnectionId().getSessionAlias();
@@ -362,7 +362,7 @@ public class ActHandler extends ActImplBase {
                     .build();
             eventBatchMessageRouter.send(eventBatch, "publish", "event");
         } finally {
-            logger.debug("Sending a message ended");
+            logger.debug("Sending the message ended");
         }
     }
 
@@ -473,12 +473,12 @@ public class ActHandler extends ActImplBase {
     }
 
     private Checkpoint registerCheckPoint(EventID parentEventId) {
-        logger.debug("Registering a checkpoint start");
+        logger.debug("Registering the checkpoint started");
         CheckpointResponse response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)
                 .build());
         if (logger.isDebugEnabled()) {
-            logger.debug("Registering a checkpoint ended. Response " + shortDebugString(response));
+            logger.debug("Registering the checkpoint ended. Response " + shortDebugString(response));
         }
         return response.getCheckpoint();
     }
