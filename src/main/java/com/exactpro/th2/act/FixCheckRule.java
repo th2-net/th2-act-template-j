@@ -48,7 +48,7 @@ public class FixCheckRule implements CheckRule {
     public boolean onMessage(Message incomingMessage) {
         String messageType = incomingMessage.getMetadata().getMessageType();
         if (checkSessionAlias(incomingMessage) && expectedMessageTypes.contains(messageType)) {
-            if(logger.isDebugEnabled()) { logger.debug("check the message: {}", shortDebugString(incomingMessage)); }
+            if(logger.isDebugEnabled()) { logger.debug("Checking the message: {}", shortDebugString(incomingMessage)); }
             if (checkExpectedField(incomingMessage)) {
                 // we need to return the first match to the filter
                 response.compareAndSet(null, incomingMessage);

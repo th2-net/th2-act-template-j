@@ -105,10 +105,10 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "NewOrderSingle", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place Order failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place Order failed. See the logs.");
+            logger.error("Failed to place an order. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place an order. See the logs.");
         } finally {
-            logger.debug("placeOrderFIX finished");
+            logger.debug("placeOrderFIX has finished");
         }
     }
 
@@ -117,7 +117,7 @@ public class ActHandler extends ActImplBase {
         long startPlaceMessage = System.currentTimeMillis();
         try {
             if (logger.isDebugEnabled()) {
-                logger.debug("Send message request: " + shortDebugString(request));
+                logger.debug("Sending  message request: " + shortDebugString(request));
             }
 
             String actName = "sendMessage";
@@ -128,7 +128,7 @@ public class ActHandler extends ActImplBase {
 
             if (Context.current().isCancelled()) {
                 logger.warn("'{}' request cancelled by client", actName);
-                sendMessageErrorResponse(responseObserver, "Cancelled by client");
+                sendMessageErrorResponse(responseObserver, "Request has been cancelled by client");
             }
 
             sendMessage(request, parentId);
@@ -141,10 +141,10 @@ public class ActHandler extends ActImplBase {
             responseObserver.onCompleted();
 
         } catch (RuntimeException | IOException e) {
-            logger.error("Send message failed. Message = {}", request.getMessage(), e);
+            logger.error("Failed to send a message. Message = {}", request.getMessage(), e);
             sendMessageErrorResponse(responseObserver, "Send message failed. See the logs.");
         } finally {
-            logger.debug("Send message finished during {}", System.currentTimeMillis() - startPlaceMessage);
+            logger.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
         }
     }
 
@@ -155,8 +155,8 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "OrderMassCancelRequest", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableSet.of("OrderMassCancelReport"), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place OrderMassCancelRequest failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place OrderMassCancelRequest failed. See the logs.");
+            logger.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. See the logs.");
         } finally {
             logger.debug("placeOrderMassCancelRequestFIX finished");
         }
@@ -169,10 +169,10 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "QuoteCancel", "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
                     ImmutableSet.of("MassQuoteAcknowledgement"), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place QuoteCancel failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place QuoteCancel failed. See the logs.");
+            logger.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. See the logs.");
         } finally {
-            logger.debug("placeQuoteCancelFIX finished");
+            logger.debug("placeQuoteCancelFIX has finished");
         }
     }
 
@@ -183,10 +183,10 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "QuoteRequest", "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
                     ImmutableSet.of("QuoteStatusReport"), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place QuoteRequest failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place QuoteRequest failed. See the logs.");
+            logger.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. See the logs.");
         } finally {
-            logger.debug("placeQuoteRequestFIX finished");
+            logger.debug("placeQuoteRequestFIX has finished");
         }
     }
 
@@ -197,10 +197,10 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "QuoteResponse", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("ExecutionReport", "QuoteStatusReport"), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place QuoteRespons failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place QuoteRespons failed. See the logs.");
+            logger.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. See the logs.");
         } finally {
-            logger.debug("placeQuoteResponseFIX finished");
+            logger.debug("placeQuoteResponseFIX has finished");
         }
     }
 
@@ -211,10 +211,10 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, "Quote", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableSet.of("QuoteAck"), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
-            logger.error("Place Quote failed. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Place Quote failed. See the logs.");
+            logger.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place a Quote. See the logs.");
         } finally {
-            logger.debug("placeQuoteFIX finished");
+            logger.debug("placeQuoteFIX has finished");
         }
     }
 
@@ -247,7 +247,7 @@ public class ActHandler extends ActImplBase {
                         actName, System.currentTimeMillis() - startAwaitSync);
                 if (Context.current().isCancelled()) {
                     logger.warn("'{}' request cancelled by client", actName);
-                    sendErrorResponse(responseObserver, "Cancelled by client");
+                    sendErrorResponse(responseObserver, "The request has been cancelled by the client");
                 } else {
                     processResponseMessage(actName,
                             responseObserver,
@@ -301,7 +301,7 @@ public class ActHandler extends ActImplBase {
                                         Message responseMessage,
                                         long timeout) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
-        String message = format("No response message received during '%s' ms", timeout);
+        String message = format("No response message has been received in '%s' ms", timeout);
         if (responseMessage == null) {
             createAndStoreErrorEvent(actName,
                     message,
@@ -345,7 +345,7 @@ public class ActHandler extends ActImplBase {
 
     private void sendMessage(PlaceMessageRequest request, EventID parentEventId) throws IOException {
         try {
-            logger.debug("Send message start");
+            logger.debug("Sending the message started");
 
             //May be use in future for filtering
             //request.getConnectionId().getSessionAlias();
@@ -362,7 +362,7 @@ public class ActHandler extends ActImplBase {
                     .build();
             eventBatchMessageRouter.send(eventBatch, "publish", "event");
         } finally {
-            logger.debug("Send message end");
+            logger.debug("Sending the message ended");
         }
     }
 
@@ -413,11 +413,11 @@ public class ActHandler extends ActImplBase {
     private void storeEvent(com.exactpro.th2.common.grpc.Event eventRequest) {
         try {
             if (logger.isDebugEnabled()) {
-                logger.debug("try to store event: {}", toDebugMessage(eventRequest));
+                logger.debug("Try to store event: {}", toDebugMessage(eventRequest));
             }
             eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event");
         } catch (Exception e) {
-            logger.error("could not store event", e);
+            logger.error("Could not store event", e);
         }
     }
 
@@ -457,7 +457,7 @@ public class ActHandler extends ActImplBase {
                         .build())
                 .build());
         responseObserver.onCompleted();
-        logger.debug("error response : {}", message);
+        logger.debug("Error response : {}", message);
     }
 
     private void sendMessageErrorResponse(StreamObserver<SendMessageResponse> responseObserver,
@@ -469,16 +469,16 @@ public class ActHandler extends ActImplBase {
                         .build())
                 .build());
         responseObserver.onCompleted();
-        logger.debug("error response : {}", message);
+        logger.debug("Error response : {}", message);
     }
 
     private Checkpoint registerCheckPoint(EventID parentEventId) {
-        logger.debug("Register checkpoint start");
+        logger.debug("Registering the checkpoint started");
         CheckpointResponse response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)
                 .build());
         if (logger.isDebugEnabled()) {
-            logger.debug("Register checkpoint end. Response " + shortDebugString(response));
+            logger.debug("Registering the checkpoint ended. Response " + shortDebugString(response));
         }
         return response.getCheckpoint();
     }
