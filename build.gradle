@@ -40,7 +40,7 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:bom:2.5.+')
+        api platform('com.exactpro.th2:bom:2.10.0')
 
         implementation "com.exactpro.th2:grpc-common"
     }
@@ -110,7 +110,7 @@ apply plugin: 'com.palantir.docker'
 
 dependencies {
     implementation "com.exactpro.th2:common"
-    implementation "com.exactpro.th2:grpc-act-template"
+    implementation "com.exactpro.th2:grpc-act-template:2.3.0"
     implementation "com.exactpro.th2:grpc-check1"
     implementation "com.exactpro.th2:grpc-common"
 
