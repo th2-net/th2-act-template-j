@@ -23,7 +23,9 @@ import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.lang.String.format;
 import static java.time.Instant.ofEpochMilli;
+import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.toUnmodifiableMap;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -31,14 +33,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.schema.message.MessageListener;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 
@@ -68,7 +70,6 @@ import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Timestamp;
 
 import io.grpc.Context;
@@ -90,10 +91,10 @@ public class ActHandler extends ActImplBase {
             MessageRouter<EventBatch> eventBatchRouter,
             Check1Service verifierService
     ) {
-        this.messageRouter = Objects.requireNonNull(router, "'Router' parameter");
-        this.eventBatchMessageRouter = Objects.requireNonNull(eventBatchRouter, "'Event batch router' parameter");
-        this.verifierConnector = Objects.requireNonNull(verifierService, "'Verifier service' parameter");
-        this.callbackList = Objects.requireNonNull(callbackList, "'Callback list' parameter");
+        this.messageRouter = requireNonNull(router, "'Router' parameter");
+        this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
+        this.verifierConnector = requireNonNull(verifierService, "'Verifier service' parameter");
+        this.callbackList = requireNonNull(callbackList, "'Callback list' parameter");
     }
 
     @Override
@@ -102,8 +103,8 @@ public class ActHandler extends ActImplBase {
             if (logger.isDebugEnabled()) {
                 logger.debug("placeOrderFIX request: " + shortDebugString(request));
             }
-            placeMessage(request, responseObserver, "NewOrderSingle", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableSet.of("ExecutionReport", "BusinessMessageReject"), "placeOrderFIX");
+            placeMessage(request, responseObserver, "NewOrderSingle", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+                    ImmutableMap.of("ExecutionReport", new CheckMetadata("ClOrdID"), "BusinessMessageReject", new CheckMetadata("BusinessRejectRefID", FAILED)), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place an order. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an order. See the logs.");
@@ -152,8 +153,8 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeOrderMassCancelRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "OrderMassCancelRequest", "ClOrdID", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableSet.of("OrderMassCancelReport"), "placeOrderMassCancelRequestFIX");
+            placeMessage(request, responseObserver, "OrderMassCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+                    ImmutableMap.of("OrderMassCancelReport", new CheckMetadata("ClOrdID")), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. See the logs.");
@@ -166,8 +167,8 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteCancelFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteCancel", "QuoteID", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
-                    ImmutableSet.of("MassQuoteAcknowledgement"), "placeQuoteCancelFIX");
+            placeMessage(request, responseObserver, "QuoteCancel", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
+                    ImmutableMap.of("MassQuoteAcknowledgement", new CheckMetadata("QuoteID")), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. See the logs.");
@@ -180,8 +181,8 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteRequest", "QuoteReqID", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
-                    ImmutableSet.of("QuoteStatusReport"), "placeQuoteRequestFIX");
+            placeMessage(request, responseObserver, "QuoteRequest", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
+                    ImmutableMap.of("QuoteStatusReport", new CheckMetadata("QuoteReqID")), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. See the logs.");
@@ -194,8 +195,8 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteResponseFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteResponse", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableSet.of("ExecutionReport", "QuoteStatusReport"), "placeQuoteResponseFIX");
+            placeMessage(request, responseObserver, "QuoteResponse", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+                    ImmutableMap.of("ExecutionReport", new CheckMetadata("RFQID"),"QuoteStatusReport", new CheckMetadata("RFQID")), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. See the logs.");
@@ -208,8 +209,8 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             logger.debug("placeQuoteFIX request: {}", request);
-            placeMessage(request, responseObserver, "Quote", "RFQID", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableSet.of("QuoteAck"), "placeQuoteFIX");
+            placeMessage(request, responseObserver, "Quote", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+                    ImmutableMap.of("QuoteAck", new CheckMetadata("RFQID")), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             logger.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a Quote. See the logs.");
@@ -226,14 +227,15 @@ public class ActHandler extends ActImplBase {
     }
 
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-                              String expectedRequestType, String expectedFieldName, String expectedFieldValue, Set<String> expectedMessageTypes, String actName) throws JsonProcessingException {
+            String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
         ConnectionID requestConnId = request.getConnectionId();
         checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
-        var checkRule = new FixCheckRule(expectedFieldName, expectedFieldValue, expectedMessageTypes, requestConnId);
+        Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
+                .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
+        var checkRule = new FixCheckRule(expectedFieldValue, msgTypeToFieldName, requestConnId);
 
-        // FIXME store parent with fail in case of children fail
         EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
@@ -254,6 +256,7 @@ public class ActHandler extends ActImplBase {
                             checkpoint,
                             parentId,
                             messageReceiver.getResponseMessage(),
+                            expectedMessages,
                             timeout);
                 }
             }
@@ -295,11 +298,11 @@ public class ActHandler extends ActImplBase {
     }
 
     private void processResponseMessage(String actName,
-                                        StreamObserver<PlaceMessageResponse> responseObserver,
-                                        Checkpoint checkpoint,
-                                        EventID parentEventId,
-                                        Message responseMessage,
-                                        long timeout) throws JsonProcessingException {
+            StreamObserver<PlaceMessageResponse> responseObserver,
+            Checkpoint checkpoint,
+            EventID parentEventId,
+            Message responseMessage,
+            Map<String, CheckMetadata> expectedMessages, long timeout) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
         String message = format("No response message has been received in '%s' ms", timeout);
         if (responseMessage == null) {
@@ -309,16 +312,19 @@ public class ActHandler extends ActImplBase {
                     parentEventId);
             sendErrorResponse(responseObserver, message);
         } else {
+            MessageMetadata metadata = responseMessage.getMetadata();
+            String messageType = metadata.getMessageType();
+            CheckMetadata checkMetadata = expectedMessages.get(messageType);
             storeEvent(Event.start()
-                            .name(format("Received '%s' response message", responseMessage.getMetadata().getMessageType()))
+                            .name(format("Received '%s' response message", messageType))
                             .type("message")
-                            .status(PASSED)
-                            .messageID(responseMessage.getMetadata().getId())
+                            .status(checkMetadata.getEventStatus())
+                            .messageID(metadata.getId())
                             .toProtoEvent(parentEventId.getId())
             );
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage)
-                    .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
+                    .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
                     .setCheckpointId(checkpoint)
                     .build();
             responseObserver.onNext(response);
@@ -485,5 +491,42 @@ public class ActHandler extends ActImplBase {
 
     private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
         return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
+    }
+
+    private static class CheckMetadata {
+        private final Status eventStatus;
+        private final RequestStatus.Status requestStatus;
+        private final String fieldName;
+
+        public CheckMetadata(String fieldName, Status eventStatus) {
+            this.eventStatus = requireNonNull(eventStatus, "Event status can't be null");
+            this.fieldName = requireNonNull(fieldName, "Field name can't be null");
+
+            switch (eventStatus) {
+                case PASSED:
+                    requestStatus = SUCCESS;
+                    break;
+                case FAILED:
+                    requestStatus = ERROR;
+                    break;
+                default: throw new IllegalArgumentException("Event status '" + eventStatus + "' can't be convert to request status");
+            }
+        }
+
+        public CheckMetadata(String fieldName) {
+            this(fieldName, PASSED);
+        }
+
+        public Status getEventStatus() {
+            return eventStatus;
+        }
+
+        public RequestStatus.Status getRequestStatus() {
+            return requestStatus;
+        }
+
+        public String getFieldName() {
+            return fieldName;
+        }
     }
 }
