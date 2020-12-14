@@ -30,7 +30,7 @@ import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.Value;
 
 public class FixCheckRule implements CheckRule {
-    private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
+    private static final Logger LOGGER = LoggerFactory.getLogger(FixCheckRule.class);
     private final String expectedFieldValue;
     private final Map<String, String> msgTypeToFieldName;
     private final ConnectionID requestConnId;
@@ -49,13 +49,13 @@ public class FixCheckRule implements CheckRule {
         if (checkSessionAlias(incomingMessage)) {
             String fieldName = msgTypeToFieldName.get(messageType);
             if (fieldName != null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Checking the message: {}", shortDebugString(incomingMessage));
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Checking the message: {}", shortDebugString(incomingMessage));
                 }
                 if (checkExpectedField(incomingMessage, fieldName)) {
                     // we need to return the first match to the filter
                     response.compareAndSet(null, incomingMessage);
-                    logger.debug("FixCheckRule passed on {} messageType", messageType);
+                    LOGGER.debug("FixCheckRule passed on {} messageType", messageType);
                     return true;
                 }
             }

@@ -28,7 +28,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MessageReceiver implements AutoCloseable {
-    private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
+    private static final Logger LOGGER = LoggerFactory.getLogger(MessageReceiver.class);
     private final List<MessageListener<MessageBatch>> callbackList;
     private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
     private final CheckRule checkRule;
@@ -69,21 +69,21 @@ public class MessageReceiver implements AutoCloseable {
 
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {
         try {
-            logger.debug("Message received batch, size {}", batch.getSerializedSize());
+            LOGGER.debug("Message received batch, size {}", batch.getSerializedSize());
             for (Message message : batch.getMessagesList()) {
                 if (hasMatch()) {
-                    logger.debug("The match was already found. Skip batch checking");
+                    LOGGER.debug("The match was already found. Skip batch checking");
                     break;
                 }
                 if (checkRule.onMessage(message)) {
                     firstMatch = message;
                     signalAboutReceived();
-                    logger.debug("Found first match '{}'. Skip other messages", message);
+                    LOGGER.debug("Found first match '{}'. Skip other messages", message);
                     break;
                 }
             }
         } catch (RuntimeException e) {
-            logger.error("Could not process incoming message", e);
+            LOGGER.error("Could not process incoming message", e);
         }
     }
 
