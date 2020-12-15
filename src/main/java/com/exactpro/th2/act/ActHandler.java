@@ -104,7 +104,7 @@ public class ActHandler extends ActImplBase {
                 LOGGER.debug("placeOrderFIX request: " + shortDebugString(request));
             }
             placeMessage(request, responseObserver, "NewOrderSingle", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", new CheckMetadata("ClOrdID"), "BusinessMessageReject", new CheckMetadata("BusinessRejectRefID", FAILED)), "placeOrderFIX");
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an order. See the logs.");
@@ -154,7 +154,7 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("placeOrderMassCancelRequestFIX request: {}", request);
             placeMessage(request, responseObserver, "OrderMassCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("OrderMassCancelReport", new CheckMetadata("ClOrdID")), "placeOrderMassCancelRequestFIX");
+                    ImmutableMap.of("OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. See the logs.");
@@ -168,7 +168,7 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("placeQuoteCancelFIX request: {}", request);
             placeMessage(request, responseObserver, "QuoteCancel", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
-                    ImmutableMap.of("MassQuoteAcknowledgement", new CheckMetadata("QuoteID")), "placeQuoteCancelFIX");
+                    ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. See the logs.");
@@ -182,7 +182,7 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("placeQuoteRequestFIX request: {}", request);
             placeMessage(request, responseObserver, "QuoteRequest", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
-                    ImmutableMap.of("QuoteStatusReport", new CheckMetadata("QuoteReqID")), "placeQuoteRequestFIX");
+                    ImmutableMap.of("QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. See the logs.");
@@ -196,7 +196,7 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("placeQuoteResponseFIX request: {}", request);
             placeMessage(request, responseObserver, "QuoteResponse", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", new CheckMetadata("RFQID"),"QuoteStatusReport", new CheckMetadata("RFQID")), "placeQuoteResponseFIX");
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("RFQID"),"QuoteStatusReport", CheckMetadata.passOn("RFQID")), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. See the logs.");
@@ -210,7 +210,7 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("placeQuoteFIX request: {}", request);
             placeMessage(request, responseObserver, "Quote", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableMap.of("QuoteAck", new CheckMetadata("RFQID")), "placeQuoteFIX");
+                    ImmutableMap.of("QuoteAck", CheckMetadata.passOn("RFQID")), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place a Quote. See the logs.");
@@ -498,7 +498,7 @@ public class ActHandler extends ActImplBase {
         private final RequestStatus.Status requestStatus;
         private final String fieldName;
 
-        public CheckMetadata(String fieldName, Status eventStatus) {
+        private CheckMetadata(String fieldName, Status eventStatus) {
             this.eventStatus = requireNonNull(eventStatus, "Event status can't be null");
             this.fieldName = requireNonNull(fieldName, "Field name can't be null");
 
@@ -513,10 +513,6 @@ public class ActHandler extends ActImplBase {
             }
         }
 
-        public CheckMetadata(String fieldName) {
-            this(fieldName, PASSED);
-        }
-
         public Status getEventStatus() {
             return eventStatus;
         }
@@ -527,6 +523,14 @@ public class ActHandler extends ActImplBase {
 
         public String getFieldName() {
             return fieldName;
+        }
+
+        public static CheckMetadata passOn(String fieldName) {
+            return new CheckMetadata(fieldName, PASSED);
+        }
+
+        public static CheckMetadata failOn(String fieldName) {
+            return new CheckMetadata(fieldName, FAILED);
         }
     }
 }
