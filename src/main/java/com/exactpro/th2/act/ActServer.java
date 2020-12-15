@@ -21,18 +21,18 @@ import org.slf4j.LoggerFactory;
 import io.grpc.Server;
 
 public class ActServer {
-    private final Logger logger = LoggerFactory.getLogger(getClass().getName() + "@" + hashCode());
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActServer.class);
     private final Server server;
 
     public ActServer(Server server) throws IOException {
         this.server = server;
         this.server.start();
-        logger.info("'{}' started", ActServer.class.getSimpleName());
+        LOGGER.info("'{}' started", ActServer.class.getSimpleName());
     }
 
     public void stop() throws InterruptedException {
         if (server.shutdown().awaitTermination(1, TimeUnit.SECONDS)) {
-            logger.warn("Server isn't stopped gracefully");
+            LOGGER.warn("Server isn't stopped gracefully");
             server.shutdownNow();
         }
     }
