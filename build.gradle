@@ -5,120 +5,107 @@ plugins {
     id "com.jfrog.bintray" version '1.8.5'
 }
 
-allprojects {
-    apply plugin: 'java'
-    apply plugin: 'java-library'
-    apply plugin: 'maven-publish'
-
-    ext {
-        sharedDir           = file("${project.rootDir}/shared")
-    }
-
-    group = 'com.exactpro.th2'
-    version = release_version
-
-    sourceCompatibility = 11
-    targetCompatibility = 11
-
-    repositories {
-        maven {
-            name 'MavenLocal'
-            url sharedDir
-        }
-        mavenCentral()
-        maven {
-            name 'Bintray'
-            url 'https://dl.bintray.com/exactpro/th2'
-        }
-
-        mavenLocal()
-
-        configurations.all {
-            resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-            resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-        }
-    }
-
-    dependencies {
-        api platform('com.exactpro.th2:bom:2.10.0')
-
-        implementation "com.exactpro.th2:grpc-common"
-    }
-
-    jar {
-        manifest {
-            attributes(
-                    'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                    'Specification-Title':      '',
-                    'Specification-Vendor':     'Exactpro Systems LLC',
-                    'Implementation-Title':     project.archivesBaseName,
-                    'Implementation-Vendor':    'Exactpro Systems LLC',
-                    'Implementation-Vendor-Id': 'com.exactpro',
-                    'Implementation-Version':   project.version
-            )
-        }
-    }
-
-    publishing {
-        publications {
-            mavenJava(MavenPublication) {
-                from components.java
-            }
-            bintrayPublication(MavenPublication) {
-                from components.java
-                groupId group
-                artifactId rootProject.name
-                version project.version
-                pom.withXml {
-                    def root = asNode()
-                    root.appendNode('name', rootProject.name)
-                    root.appendNode('url', "${vcs_url}")
-                }
-            }
-        }
-
-        repositories {
-            maven {
-                name = 'localRepo'
-                url = sharedDir
-            }
-        }
-    }
-
-    bintray {
-        user = "${bintray_user}"
-        key = "${bintray_key}"
-        publications = ['bintrayPublication']
-        pkg {
-            repo = 'th2'
-            name = rootProject.name
-            userOrg = 'exactpro'
-            licenses = ['Apache-2.0']
-            vcsUrl = "${vcs_url}"
-            version {
-                name = project.version
-                desc = project.version
-                released  = new Date()
-            }
-        }
-        publish = true
-    }
-}
-
+apply plugin: 'java'
+apply plugin: 'java-library'
+apply plugin: 'maven-publish'
 apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
-dependencies {
-    implementation "com.exactpro.th2:common"
-    implementation "com.exactpro.th2:grpc-act-template:2.3.0"
-    implementation "com.exactpro.th2:grpc-check1"
-    implementation "com.exactpro.th2:grpc-common"
+ext {
+    sharedDir           = file("${project.rootDir}/shared")
+}
 
-    implementation "com.google.protobuf:protobuf-java-util"
-    implementation "io.grpc:grpc-protobuf"
-    implementation "io.grpc:grpc-stub"
-    implementation "io.grpc:grpc-core"
-    implementation "io.grpc:grpc-netty"
+group = 'com.exactpro.th2'
+version = release_version
+
+sourceCompatibility = 11
+targetCompatibility = 11
+
+repositories {
+    maven {
+        name 'MavenLocal'
+        url sharedDir
+    }
+    mavenCentral()
+    maven {
+        name 'Bintray'
+        url 'https://dl.bintray.com/exactpro/th2'
+    }
+
+    mavenLocal()
+
+    configurations.all {
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+                'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title':      '',
+                'Specification-Vendor':     'Exactpro Systems LLC',
+                'Implementation-Title':     project.archivesBaseName,
+                'Implementation-Vendor':    'Exactpro Systems LLC',
+                'Implementation-Vendor-Id': 'com.exactpro',
+                'Implementation-Version':   project.version
+        )
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+        bintrayPublication(MavenPublication) {
+            from components.java
+            groupId group
+            artifactId rootProject.name
+            version project.version
+            pom.withXml {
+                def root = asNode()
+                root.appendNode('name', rootProject.name)
+                root.appendNode('url', "${vcs_url}")
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'localRepo'
+            url = sharedDir
+        }
+    }
+}
+
+bintray {
+    user = "${bintray_user}"
+    key = "${bintray_key}"
+    publications = ['bintrayPublication']
+    pkg {
+        repo = 'th2'
+        name = rootProject.name
+        userOrg = 'exactpro'
+        licenses = ['Apache-2.0']
+        vcsUrl = "${vcs_url}"
+        version {
+            name = project.version
+            desc = project.version
+            released  = new Date()
+        }
+    }
+    publish = true
+}
+
+dependencies {
+    api platform('com.exactpro.th2:bom:2.10.1')
+
+    implementation "com.exactpro.th2:common:2.9.0"
+    implementation "com.exactpro.th2:grpc-act-template:2.3.0"
+    implementation "com.exactpro.th2:grpc-check1:2.2.1"
+    implementation "com.exactpro.th2:grpc-common:2.3.2"
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
