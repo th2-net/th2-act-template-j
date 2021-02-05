@@ -31,7 +31,18 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
-import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.EventID;
+import com.exactpro.th2.common.grpc.Checkpoint;
+import com.exactpro.th2.common.grpc.RequestStatus;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.Value;
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.ListValueOrBuilder;
 import com.exactpro.th2.common.schema.message.MessageListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -322,7 +333,7 @@ public class ActHandler extends ActImplBase {
             if (entry.getValue().eventStatus == PASSED) {
                 passedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
             }
-            if (entry.getValue().eventStatus == FAILED) {
+            else  {
                 failedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
             }
         }
@@ -433,10 +444,7 @@ public class ActHandler extends ActImplBase {
         return event.toProtoEvent(parentEventId);
     }
 
-    private void createAndStoreErrorEvent(String actName, String message,
-                                          Instant start,
-                                          EventID parentEventId) throws JsonProcessingException {
-
+    private void createAndStoreErrorEvent(String actName, String message,Instant start,EventID parentEventId) throws JsonProcessingException {
         Event errorEvent = Event.from(start)
                 .endTimestamp()
                 .name(format("Internal %s error", actName))
