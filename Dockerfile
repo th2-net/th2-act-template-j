@@ -11,7 +11,7 @@ RUN gradle --no-daemon clean build dockerPrepare \
     -Pbintray_key=${bintray_key} \
     -Pvcs_url=${vcs_url}
 
-FROM openjdk:12-alpine
+FROM adoptopenjdk/openjdk11:alpine
 ENV GRPC_PORT=8080 \
     RABBITMQ_HOST=rabbitmq \
     RABBITMQ_PORT=5672 \
