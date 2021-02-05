@@ -23,9 +23,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.exactpro.th2.common.grpc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.Value;
 
 public class FixCheckRule implements CheckRule {
     private static final Logger LOGGER = LoggerFactory.getLogger(FixCheckRule.class);
