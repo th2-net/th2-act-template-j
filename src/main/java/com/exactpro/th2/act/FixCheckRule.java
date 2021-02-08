@@ -17,6 +17,8 @@ package com.exactpro.th2.act;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,6 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.Value;
 
@@ -34,7 +37,7 @@ public class FixCheckRule implements CheckRule {
     private final String expectedFieldValue;
     private final Map<String, String> msgTypeToFieldName;
     private final ConnectionID requestConnId;
-
+    private final List<MessageID> messageIDList = new ArrayList<>();
     private final AtomicReference<Message> response = new AtomicReference<>();
 
     public FixCheckRule(String expectedFieldValue, Map<String, String> msgTypeToFieldName, ConnectionID requestConnId) {
@@ -47,6 +50,7 @@ public class FixCheckRule implements CheckRule {
     public boolean onMessage(Message incomingMessage) {
         String messageType = incomingMessage.getMetadata().getMessageType();
         if (checkSessionAlias(incomingMessage)) {
+            messageIDList.add(incomingMessage.getMetadata().getId());
             String fieldName = msgTypeToFieldName.get(messageType);
             if (fieldName != null) {
                 if (LOGGER.isDebugEnabled()) {
@@ -61,6 +65,10 @@ public class FixCheckRule implements CheckRule {
             }
         }
         return false;
+    }
+
+    public List<MessageID> getMessageIDList() {
+        return messageIDList;
     }
 
     @Override
