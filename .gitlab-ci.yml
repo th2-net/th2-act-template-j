@@ -1,7 +1,4 @@
-variables:
-  APP_NAME: "th2-act-template"
-
 include:
   - project: "vivarium/th2/pipelines"
     ref: master
-    file: "/.gitlab-ci-java.yml"
+    file: "/.gitlab-ci-java-test.yml"

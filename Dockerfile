@@ -2,13 +2,18 @@ FROM gradle:6.6-jdk11 AS build
 ARG release_version
 ARG bintray_user
 ARG bintray_key
+ARG nexus_url
+ARG nexus_user
+ARG nexus_password
 ARG vcs_url
 
 COPY ./ .
 RUN gradle --no-daemon clean build dockerPrepare \
-    -Prelease_version=${release_version} \
     -Pbintray_user=${bintray_user} \
     -Pbintray_key=${bintray_key} \
+    -Pnexus_url=${Pnexus_url} \
+    -Pnexus_user=${nexus_user} \
+    -Pnexus_password=${Pnexus_password} \
     -Pvcs_url=${vcs_url}
 
 FROM adoptopenjdk/openjdk11:alpine
