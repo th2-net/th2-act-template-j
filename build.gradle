@@ -9,7 +9,7 @@ buildscript {
             }
         }
         dependencies {
-            classpath "com.exactpro.th2:th2-gradle-plugin:0.1.6"
+            classpath "com.exactpro.th2:th2-gradle-plugin:0.1.7"
         }
     }
 }

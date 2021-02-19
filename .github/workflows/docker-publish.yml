@@ -36,7 +36,7 @@ jobs:
       id: proto_json
       run: |
         gradle generateServiceDescriptions
-        echo "::set-output name=DESCRIPTION_JSON::$(cat serviceProtoDescription.json)"
+        echo "::set-output name=DESCRIPTION_JSON::$(cat serviceProtoDescription)"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Build and push
@@ -50,4 +50,4 @@ jobs:
         tags: ghcr.io/${{ github.repository }}:${{ steps.read_property.outputs.value }}
         labels: |
           com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.read_property.outputs.value }}
-          com.exactpro.th2.jsonProtoDescription=${{ fromJSON(steps.proto_json.outputs.DESCRIPTION_JSON) }}
+          protobuf-description-base64=${{ steps.proto_json.outputs.DESCRIPTION_JSON }}
