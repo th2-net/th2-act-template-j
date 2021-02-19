@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - master
+    - TH2-1350-test-script
 #     paths:
 #    - gradle.properties
 #    - package_info.json  
