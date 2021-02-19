@@ -3,6 +3,8 @@ ARG release_version
 ARG bintray_user
 ARG bintray_key
 ARG vcs_url
+ARG GITHUB_ACTOR
+ARG GITHUB_TOKEN
 
 COPY ./ .
 RUN gradle generateServiceDescriptions
