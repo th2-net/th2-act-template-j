@@ -49,4 +49,4 @@ jobs:
         tags: ghcr.io/${{ github.repository }}:${{ steps.read_property.outputs.value }}
         labels: |
           com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.read_property.outputs.value }}
-          com.exactpro.th2.jsonProtoDescription=${{ toJSON(steps.proto_json.outputs.DESCRIPTION_JSON) }}
+          com.exactpro.th2.jsonProtoDescription=${{ fromJSON(steps.proto_json.outputs.DESCRIPTION_JSON) }}
