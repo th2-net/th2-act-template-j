@@ -4,10 +4,10 @@ on:
   push:
     branches:
     - master
-    - TH2-1350-test-script
+    - version-*
 #     paths:
 #    - gradle.properties
-#    - package_info.json  
+#    - package_info.json
 
 jobs:
   build:
