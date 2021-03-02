@@ -3,11 +3,12 @@ name: Dev build and publish Docker distributions to Github Container Registry gh
 on:
   push:
     branches-ignore:
-      - master
-      - version-*
-    paths:
-      - gradle.properties
-#    - package_info.json
+    - master
+    - version-*
+#     paths:
+#    - gradle.properties
+#    - package_info.json  
+
 
 jobs:
   build:
