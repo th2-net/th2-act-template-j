@@ -20,6 +20,8 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
+import com.exactpro.th2.act.impl.MessageResponseMonitor;
+import com.exactpro.th2.act.rules.FieldCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
@@ -48,7 +50,6 @@ import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -59,6 +60,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,7 +143,7 @@ public class ActHandler extends ActImplBase {
                 sendMessageErrorResponse(responseObserver, "Request has been cancelled by client");
             }
 
-            sendMessage(request, parentId);
+            sendMessage(backwardCompatibilityConnectionId(request), parentId);
 
             SendMessageResponse response = SendMessageResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
@@ -239,21 +241,24 @@ public class ActHandler extends ActImplBase {
                               String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
-        ConnectionID requestConnId = request.getConnectionId();
-        checkRequestMessageType(expectedRequestType, request.getMessage().getMetadata());
+        Message message = backwardCompatibilityConnectionId(request);
+        checkRequestMessageType(expectedRequestType, message.getMetadata());
+        ConnectionID requestConnId = message.getMetadata().getId().getConnectionId();
+
         Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
                 .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
-        var checkRule = new FixCheckRule(expectedFieldValue, msgTypeToFieldName, requestConnId);
+        CheckRule checkRule = new FieldCheckRule(expectedFieldValue, msgTypeToFieldName, requestConnId);
 
         EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
-        try (MessageReceiver messageReceiver = new MessageReceiver(subscriptionManager, checkRule, Direction.FIRST)) {
-            if (isSendPlaceMessage(request, responseObserver, parentId)) {
+        MessageResponseMonitor monitor = new MessageResponseMonitor();
+        try (AbstractMessageReceiver messageReceiver = new MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST)) {
+            if (isSendPlaceMessage(message, responseObserver, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
                 long timeout = getTimeout(Context.current().getDeadline());
-                messageReceiver.awaitSync(timeout, MILLISECONDS);
+                monitor.awaitSync(timeout, MILLISECONDS);
                 LOGGER.debug("messageReceiver.awaitSync for {} in {} ms",
                         actName, System.currentTimeMillis() - startAwaitSync);
                 if (Context.current().isCancelled()) {
@@ -266,7 +271,7 @@ public class ActHandler extends ActImplBase {
                             parentId,
                             messageReceiver.getResponseMessage(),
                             expectedMessages,
-                            timeout, expectedFieldValue, checkRule.getMessageIDList());
+                            timeout, expectedFieldValue, messageReceiver.processedMessageIDs());
                 }
             }
         } catch (RuntimeException | InterruptedException e) {
@@ -304,7 +309,7 @@ public class ActHandler extends ActImplBase {
 
     private void createAndStoreNoResponseEvent(String actName, Map<String, CheckMetadata> expectedMessages, String fieldValue,
                                                Instant start,
-                                               EventID parentEventId, List<MessageID> messageIDList) throws JsonProcessingException {
+                                               EventID parentEventId, Collection<MessageID> messageIDList) throws JsonProcessingException {
 
         Event errorEvent = Event.from(start)
                 .endTimestamp()
@@ -341,7 +346,7 @@ public class ActHandler extends ActImplBase {
                                         Checkpoint checkpoint,
                                         EventID parentEventId,
                                         Message responseMessage,
-                                        Map<String, CheckMetadata> expectedMessages, long timeout, String expectedValue, List<MessageID> messageIDList) throws JsonProcessingException {
+                                        Map<String, CheckMetadata> expectedMessages, long timeout, String expectedValue, Collection<MessageID> messageIDList) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
         String message = format("No response message has been received in '%s' ms", timeout);
         if (responseMessage == null) {
@@ -374,12 +379,12 @@ public class ActHandler extends ActImplBase {
         LOGGER.debug("processResponseMessage in {} ms", System.currentTimeMillis() - startTime);
     }
 
-    private boolean isSendPlaceMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
+    private boolean isSendPlaceMessage(Message message, StreamObserver<PlaceMessageResponse> responseObserver,
                                        EventID parentEventId) {
         long startTime = System.currentTimeMillis();
 
         try {
-            sendMessage(request, parentEventId);
+            sendMessage(message, parentEventId);
             return true;
         } catch (IOException e) {
             LOGGER.error("Could not send message to queue", e);
@@ -390,13 +395,12 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private void sendMessage(PlaceMessageRequest request, EventID parentEventId) throws IOException {
+    private void sendMessage(Message message, EventID parentEventId) throws IOException {
         try {
             LOGGER.debug("Sending the message started");
 
             //May be use in future for filtering
             //request.getConnectionId().getSessionAlias();
-            Message message = backwardCompatibilityConnectionId(request);
             messageRouter.send(MessageBatch.newBuilder()
                     .addMessages(Message.newBuilder(message)
                             .setParentEventId(parentEventId)
@@ -405,7 +409,7 @@ public class ActHandler extends ActImplBase {
             //TODO remove after solving issue TH2-217
             //TODO process response
             EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(request, parentEventId.getId()))
+                    .addEvents(createSendMessageEvent(message, parentEventId.getId()))
                     .build();
             eventBatchMessageRouter.send(eventBatch, "publish", "event");
         } finally {
@@ -415,7 +419,7 @@ public class ActHandler extends ActImplBase {
 
     private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
         ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
-        if (connectionId != null && !connectionId.getSessionAlias().isEmpty()) {
+        if (!connectionId.getSessionAlias().isEmpty()) {
             return request.getMessage();
         }
         return Message.newBuilder(request.getMessage())
@@ -427,10 +431,10 @@ public class ActHandler extends ActImplBase {
                 .build();
     }
 
-    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(PlaceMessageRequest request, String parentEventId) throws JsonProcessingException {
+    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, String parentEventId) throws JsonProcessingException {
         Event event = start()
-                .name("Send '" + request.getMessage().getMetadata().getMessageType() + "' message to connectivity");
-        TreeTable parametersTable = EventUtils.toTreeTable(request.getMessage());
+                .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");
+        TreeTable parametersTable = EventUtils.toTreeTable(message);
         event.status(Status.PASSED);
         event.bodyData(parametersTable);
         event.type("Outgoing message");
