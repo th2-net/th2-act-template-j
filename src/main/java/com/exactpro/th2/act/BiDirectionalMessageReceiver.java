@@ -21,9 +21,9 @@ import static com.google.protobuf.TextFormat.shortDebugString;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -52,9 +52,9 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     private final Queue<MessageBatch> incomingBuffer = new LinkedList<>();
     private final MessageListener<MessageBatch> incomingListener = this::processIncomingMessages;
     private final MessageListener<MessageBatch> outgoingListener = this::processOutgoingMessages;
+    private final AtomicReference<CheckRule> incomingRule = new AtomicReference<>();
 
     private volatile State state = State.START;
-    private volatile CheckRule incomingRule;
 
     public BiDirectionalMessageReceiver(
             SubscriptionManager subscriptionManager,
@@ -74,13 +74,13 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     @Override
     @Nullable
     public Message getResponseMessage() {
-        CheckRule rule = incomingRule;
+        CheckRule rule = incomingRule.get();
         return rule == null ? null : rule.getResponse();
     }
 
     @Override
     public Collection<MessageID> processedMessageIDs() {
-        CheckRule incoming = incomingRule;
+        CheckRule incoming = incomingRule.get();
         if (incoming == null || incoming.processedIDs().isEmpty()) {
             return outgoingRule.processedIDs();
         }
@@ -111,6 +111,8 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
                 LOGGER.debug("Found match for outgoing rule. Match: {}", shortDebugString(response));
             }
             state = State.OUTGOING_MATCHED;
+            CheckRule incomingRule = initOrGetIncomingRule(outgoingRule.getResponse());
+            findInBuffer(incomingRule);
         }
     }
 
@@ -124,20 +126,32 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
             if (LOGGER.isTraceEnabled()) {
                 LOGGER.trace("Buffering message batch: {}", shortDebugString(batch));
             }
-            incomingBuffer.add(batch);
+            synchronized (incomingBuffer) {
+                incomingBuffer.add(batch);
+            }
             return;
         }
 
         CheckRule incomingRule = initOrGetIncomingRule(outgoingRule.getResponse());
-        if (!incomingBuffer.isEmpty()) {
-            if (findMatchInBuffer(incomingBuffer, incomingRule)) {
-                matchFound();
-                return;
-            }
+        if (findInBuffer(incomingRule)) {
+            // match is found
+            return;
         }
         if (anyMatches(batch, incomingRule)) {
             matchFound();
         }
+    }
+
+    private boolean findInBuffer(CheckRule incomingRule) {
+        if (!incomingBuffer.isEmpty()) {
+            synchronized (incomingBuffer) {
+                if (findMatchInBuffer(incomingBuffer, incomingRule)) {
+                    matchFound();
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean findMatchInBuffer(Queue<MessageBatch> buffer, CheckRule incomingRule) {
@@ -156,12 +170,12 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     }
 
     private CheckRule initOrGetIncomingRule(Message response) {
-        CheckRule incoming = incomingRule;
-        if (incoming == null) {
-            incoming = incomingRuleSupplier.apply(response);
-            incomingRule = incoming;
-        }
-        return incoming;
+        return incomingRule.updateAndGet(rule -> {
+            if (rule == null) {
+                return incomingRuleSupplier.apply(response);
+            }
+            return rule;
+        });
     }
 
     private boolean anyMatches(MessageBatch batch, CheckRule rule) {
