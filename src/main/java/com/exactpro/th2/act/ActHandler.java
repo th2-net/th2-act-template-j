@@ -31,6 +31,7 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.EventID;
@@ -43,7 +44,6 @@ import com.exactpro.th2.common.grpc.MessageMetadata;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
-import com.exactpro.th2.common.schema.message.MessageListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
@@ -84,29 +84,22 @@ public class ActHandler extends ActImplBase {
     private final Check1Service verifierConnector;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<MessageBatch> messageRouter;
-    private final List<MessageListener<MessageBatch>> callbackList;
+    private final SubscriptionManager subscriptionManager;
 
     ActHandler(
             MessageRouter<MessageBatch> router,
-            List<MessageListener<MessageBatch>> callbackList,
+            SubscriptionManager subscriptionManager,
             MessageRouter<EventBatch> eventBatchRouter,
             Check1Service verifierService
     ) {
         this.messageRouter = requireNonNull(router, "'Router' parameter");
         this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
         this.verifierConnector = requireNonNull(verifierService, "'Verifier service' parameter");
-        this.callbackList = requireNonNull(callbackList, "'Callback list' parameter");
+        this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
     }
 
     private static long getTimeout(Deadline deadline) {
         return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
-    }
-
-    private static Timestamp getTimestamp(Instant instant) {
-        return Timestamp.newBuilder()
-                .setSeconds(instant.getEpochSecond())
-                .setNanos(instant.getNano())
-                .build();
     }
 
     private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
@@ -256,7 +249,7 @@ public class ActHandler extends ActImplBase {
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
-        try (MessageReceiver messageReceiver = new MessageReceiver(callbackList, checkRule)) {
+        try (MessageReceiver messageReceiver = new MessageReceiver(subscriptionManager, checkRule, Direction.FIRST)) {
             if (isSendPlaceMessage(request, responseObserver, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
                 long timeout = getTimeout(Context.current().getDeadline());

@@ -28,6 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.th2.act.impl.SubscriptionManagerImpl;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
@@ -59,21 +60,13 @@ public class ActMain {
             MessageRouter<MessageBatch> messageRouter = factory.getMessageRouterParsedBatch();
             resources.add(messageRouter);
 
-            List<MessageListener<MessageBatch>> callbackList = new CopyOnWriteArrayList<>();
-            SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll((consumingTag, batch) ->
-                    callbackList.forEach(callback -> {
-                        try {
-                            callback.handler(consumingTag, batch);
-                        } catch (Exception e) {
-                            LOGGER.error("Could not process incoming message", e);
-                        }
-                    }),
-                    QueueAttribute.FIRST.toString(), OE_ATTRIBUTE_NAME);
+            SubscriptionManagerImpl subscriptionManager = new SubscriptionManagerImpl();
+            SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
             resources.add(subscriberMonitor::unsubscribe);
 
             ActHandler actHandler = new ActHandler(
                     messageRouter,
-                    callbackList,
+                    subscriptionManager,
                     factory.getEventBatchRouter(),
                     grpcRouter.getService(Check1Service.class)
             );
