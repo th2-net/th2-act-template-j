@@ -238,6 +238,12 @@ public class ActHandler extends ActImplBase {
         }
     }
 
+    /**
+     *
+     * @param expectedMessages mapping between response and the event status that should be applied in that case
+     * @param noResponseBodySupplier supplier for {@link IBodyData} that will be added to the event in case there is not response received
+     * @param receiver supplier for the {@link AbstractMessageReceiver} that will await for the required message
+     */
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
                               String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
                               NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
