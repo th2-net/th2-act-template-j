@@ -600,8 +600,8 @@ public class ActHandler extends ActImplBase {
         private final EventID parentId;
 
         public ReceiverContext(ConnectionID connectionID, EventID parentId) {
-            this.connectionID = connectionID;
-            this.parentId = parentId;
+            this.connectionID = requireNonNull(connectionID, "'Connection id' parameter");
+            this.parentId = requireNonNull(parentId, "'Parent id' parameter");
         }
 
         public ConnectionID getConnectionID() {
