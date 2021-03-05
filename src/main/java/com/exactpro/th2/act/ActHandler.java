@@ -61,6 +61,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,7 +115,7 @@ public class ActHandler extends ActImplBase {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("placeOrderFIX request: " + shortDebugString(request));
             }
-            placeMessage(request, responseObserver, "NewOrderSingle", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "NewOrderSingle", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
@@ -164,7 +165,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             LOGGER.debug("placeOrderMassCancelRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "OrderMassCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "OrderMassCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
                     ImmutableMap.of("OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
@@ -178,7 +179,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             LOGGER.debug("placeQuoteCancelFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteCancel", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "QuoteCancel", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
                     ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
@@ -192,7 +193,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             LOGGER.debug("placeQuoteRequestFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteRequest", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "QuoteRequest", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
                     ImmutableMap.of("QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
@@ -206,7 +207,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             LOGGER.debug("placeQuoteResponseFIX request: {}", request);
-            placeMessage(request, responseObserver, "QuoteResponse", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "QuoteResponse", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("RFQID"), "QuoteStatusReport", CheckMetadata.passOn("RFQID")), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
@@ -220,7 +221,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         try {
             LOGGER.debug("placeQuoteFIX request: {}", request);
-            placeMessage(request, responseObserver, "Quote", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "Quote", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
                     ImmutableMap.of("QuoteAck", CheckMetadata.passOn("RFQID")), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
@@ -238,23 +239,20 @@ public class ActHandler extends ActImplBase {
     }
 
     private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-                              String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
+                              String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
+                              NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
         Message message = backwardCompatibilityConnectionId(request);
         checkRequestMessageType(expectedRequestType, message.getMetadata());
         ConnectionID requestConnId = message.getMetadata().getId().getConnectionId();
 
-        Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
-                .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
-        CheckRule checkRule = new FieldCheckRule(expectedFieldValue, msgTypeToFieldName, requestConnId);
-
         EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
 
         Checkpoint checkpoint = registerCheckPoint(parentId);
 
         MessageResponseMonitor monitor = new MessageResponseMonitor();
-        try (AbstractMessageReceiver messageReceiver = new MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST)) {
+        try (AbstractMessageReceiver messageReceiver = receiver.create(monitor, new ReceiverContext(requestConnId, parentId))) {
             if (isSendPlaceMessage(message, responseObserver, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
                 long timeout = getTimeout(Context.current().getDeadline());
@@ -271,7 +269,7 @@ public class ActHandler extends ActImplBase {
                             parentId,
                             messageReceiver.getResponseMessage(),
                             expectedMessages,
-                            timeout, expectedFieldValue, messageReceiver.processedMessageIDs());
+                            timeout, messageReceiver.processedMessageIDs(), noResponseBodySupplier);
                 }
             }
         } catch (RuntimeException | InterruptedException e) {
@@ -284,6 +282,17 @@ public class ActHandler extends ActImplBase {
         } finally {
             LOGGER.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
         }
+    }
+
+    private void placeMessageFieldRule(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
+                                       String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
+        placeMessage(request, responseObserver, expectedRequestType, expectedMessages, actName,
+                () -> Collections.singletonList(createNoResponseBody(expectedMessages, expectedFieldValue)), (monitor, context) -> {
+                    Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
+                            .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
+                    CheckRule checkRule = new FieldCheckRule(expectedFieldValue, msgTypeToFieldName, context.getConnectionID());
+                    return new MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST);
+                });
     }
 
     private EventID createAndStoreParentEvent(PlaceMessageRequestOrBuilder request, String actName, Status status) throws JsonProcessingException {
@@ -307,7 +316,7 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private void createAndStoreNoResponseEvent(String actName, Map<String, CheckMetadata> expectedMessages, String fieldValue,
+    private void createAndStoreNoResponseEvent(String actName, NoResponseBodySupplier noResponseBodySupplier,
                                                Instant start,
                                                EventID parentEventId, Collection<MessageID> messageIDList) throws JsonProcessingException {
 
@@ -315,8 +324,10 @@ public class ActHandler extends ActImplBase {
                 .endTimestamp()
                 .name(format("Internal %s error", actName))
                 .type("No response found by target keys.")
-                .status(FAILED)
-                .bodyData(createNoResponseBody(expectedMessages, fieldValue));
+                .status(FAILED);
+        for (IBodyData data : noResponseBodySupplier.createNoResponseBody()) {
+                errorEvent.bodyData(data);
+        }
         for(MessageID msgID : messageIDList){
             errorEvent.messageID(msgID);
         }
@@ -346,12 +357,14 @@ public class ActHandler extends ActImplBase {
                                         Checkpoint checkpoint,
                                         EventID parentEventId,
                                         Message responseMessage,
-                                        Map<String, CheckMetadata> expectedMessages, long timeout, String expectedValue, Collection<MessageID> messageIDList) throws JsonProcessingException {
+                                        Map<String, CheckMetadata> expectedMessages,
+                                        long timeout,
+                                        Collection<MessageID> messageIDList,
+                                        NoResponseBodySupplier noResponseBodySupplier) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
         String message = format("No response message has been received in '%s' ms", timeout);
         if (responseMessage == null) {
-            createAndStoreNoResponseEvent(actName, expectedMessages, expectedValue
-                    ,
+            createAndStoreNoResponseEvent(actName, noResponseBodySupplier,
                     Instant.now(),
                     parentEventId, messageIDList);
             sendErrorResponse(responseObserver, message);
@@ -563,6 +576,34 @@ public class ActHandler extends ActImplBase {
 
         public String getFieldName() {
             return fieldName;
+        }
+    }
+
+    @FunctionalInterface
+    private interface ReceiverSupplier {
+        AbstractMessageReceiver create(ResponseMonitor monitor, ReceiverContext context);
+    }
+
+    @FunctionalInterface
+    private interface NoResponseBodySupplier {
+        Collection<IBodyData> createNoResponseBody();
+    }
+
+    private static class ReceiverContext {
+        private final ConnectionID connectionID;
+        private final EventID parentId;
+
+        public ReceiverContext(ConnectionID connectionID, EventID parentId) {
+            this.connectionID = connectionID;
+            this.parentId = parentId;
+        }
+
+        public ConnectionID getConnectionID() {
+            return connectionID;
+        }
+
+        public EventID getParentId() {
+            return parentId;
         }
     }
 }
