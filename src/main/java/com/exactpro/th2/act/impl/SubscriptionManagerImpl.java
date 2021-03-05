@@ -67,8 +67,8 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
         Direction direction = messageBatch.getMessages(0).getMetadata().getId().getDirection();
         List<MessageListener<MessageBatch>> listeners = callbacks.get(direction);
         if (listeners == null) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Unsupported direction {}. Batch: {}", direction, shortDebugString(messageBatch));
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(messageBatch));
             }
             return;
         }
