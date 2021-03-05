@@ -117,18 +117,19 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     }
 
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {
-        State current = state;
-        if (current == State.INCOMING_MATCHED) {
-            // already has found the match
-            return;
-        }
-        if (current == State.START) {
+        if (state == State.START) {
             if (LOGGER.isTraceEnabled()) {
                 LOGGER.trace("Buffering message batch: {}", shortDebugString(batch));
             }
             synchronized (incomingBuffer) {
                 incomingBuffer.add(batch);
             }
+            if (state == State.START) {
+                return;
+            }
+        }
+        if (state == State.INCOMING_MATCHED) {
+            // already has found the match
             return;
         }
 
