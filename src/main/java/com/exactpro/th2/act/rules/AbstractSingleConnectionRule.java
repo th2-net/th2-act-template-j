@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,9 @@ public abstract class AbstractSingleConnectionRule implements CheckRule {
 
     public AbstractSingleConnectionRule(ConnectionID requestConnId) {
         this.requestConnId = Objects.requireNonNull(requestConnId, "'Request conn id' parameter");
+        if (StringUtils.isBlank(requestConnId.getSessionAlias())) {
+            throw new IllegalArgumentException("'sessionAlias' in the requestConnId must not be blank");
+        }
     }
 
     @Override
@@ -49,8 +53,9 @@ public abstract class AbstractSingleConnectionRule implements CheckRule {
             messageIDList.add(message.getMetadata().getId());
             boolean match = checkMessageFromConnection(message);
             if (match) {
-                LOGGER.debug("Message matches the rule {}. Message: {}", getClass().getSimpleName(), TextFormat.shortDebugString(message));
-                response.compareAndSet(null, message);
+                if (response.compareAndSet(null, message)) {
+                    LOGGER.debug("Message matches the rule {}. Message: {}", getClass().getSimpleName(), TextFormat.shortDebugString(message));
+                }
             }
             return match;
         }

@@ -20,6 +20,7 @@ import static com.google.protobuf.TextFormat.shortDebugString;
 import java.util.Map;
 import java.util.Objects;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +37,15 @@ public class FieldCheckRule extends AbstractSingleConnectionRule {
     public FieldCheckRule(String expectedFieldValue, Map<String, String> msgTypeToFieldName, ConnectionID requestConnId) {
         super(requestConnId);
         this.expectedFieldValue = expectedFieldValue;
+
+        msgTypeToFieldName.forEach((msgType, fieldName) -> {
+            if (StringUtils.isAnyBlank(msgType, fieldName)) {
+                throw new IllegalArgumentException("'msgTypeToFieldName' mapping must not contain blank values. "
+                        + "MsgType: '" + msgType + "'"
+                        + "FieldName: '" + fieldName + "'"
+                );
+            }
+        });
         this.msgTypeToFieldName = msgTypeToFieldName;
     }
 
