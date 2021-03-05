@@ -111,7 +111,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
                 LOGGER.debug("Found match for outgoing rule. Match: {}", shortDebugString(response));
             }
             state = State.OUTGOING_MATCHED;
-            CheckRule incomingRule = initOrGetIncomingRule(outgoingRule.getResponse());
+            CheckRule incomingRule = initOrGetIncomingRule(response);
             findInBuffer(incomingRule);
         }
     }
@@ -144,8 +144,8 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     }
 
     private boolean findInBuffer(CheckRule incomingRule) {
-        if (!incomingBuffer.isEmpty()) {
-            synchronized (incomingBuffer) {
+        synchronized (incomingBuffer) {
+            if (!incomingBuffer.isEmpty()) {
                 if (findMatchInBuffer(incomingBuffer, incomingRule)) {
                     matchFound();
                     return true;

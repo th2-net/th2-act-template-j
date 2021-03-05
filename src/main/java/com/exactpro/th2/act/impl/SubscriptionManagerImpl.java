@@ -18,6 +18,8 @@ package com.exactpro.th2.act.impl;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
 
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,11 +35,13 @@ import com.exactpro.th2.common.schema.message.MessageListener;
 
 public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, SubscriptionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(SubscriptionManagerImpl.class);
-    private final Map<Direction, List<MessageListener<MessageBatch>>> callbacks = new ConcurrentHashMap<>();
+    private final Map<Direction, List<MessageListener<MessageBatch>>> callbacks;
 
     public SubscriptionManagerImpl() {
+        Map<Direction, List<MessageListener<MessageBatch>>> callbacks = new EnumMap<>(Direction.class);
         callbacks.put(Direction.FIRST, new CopyOnWriteArrayList<>());
         callbacks.put(Direction.SECOND, new CopyOnWriteArrayList<>());
+        this.callbacks = Collections.unmodifiableMap(callbacks);
     }
 
     @Override
@@ -55,8 +59,8 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
     @Override
     public void handler(String s, MessageBatch messageBatch) {
         if (messageBatch.getMessagesCount() < 0) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Empty batch received {}", shortDebugString(messageBatch));
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Empty batch received {}", shortDebugString(messageBatch));
             }
             return;
         }
