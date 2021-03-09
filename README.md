@@ -30,7 +30,7 @@ spec:
       connection-type: grpc
     - name: from_codec
       connection-type: mq
-      attributes: [ "subscribe", "parsed", "first", "oe" ]
+      attributes: [ "subscribe", "parsed", "oe" ]
     - name: to_conn1
       connection-type: mq
       attributes:
