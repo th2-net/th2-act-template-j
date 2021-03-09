@@ -15,56 +15,57 @@
  ******************************************************************************/
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.schema.message.MessageListener;
+import java.util.Collection;
+import java.util.Objects;
+
+import javax.annotation.Nullable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import com.google.protobuf.TextFormat;
 
-public class MessageReceiver implements AutoCloseable {
+public class MessageReceiver extends AbstractMessageReceiver {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageReceiver.class);
-    private final List<MessageListener<MessageBatch>> callbackList;
+
+    private final SubscriptionManager subscriptionManager;
+    private final Direction direction;
     private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
     private final CheckRule checkRule;
-    private final Lock responseLock = new ReentrantLock();
-    private final Condition responseReceivedCondition = responseLock.newCondition();
-
     private volatile Message firstMatch;
 
     //FIXME: Add queue name
-    public MessageReceiver(List<MessageListener<MessageBatch>> callbackList, CheckRule checkRule) {
-        this.callbackList = callbackList;
-        this.callbackList.add(callback);
-        this.checkRule = checkRule;
-        //logger.info("Receiver is created with MQ configuration, queue name '{}' during '{}'", messageQueue,  System.currentTimeMillis() - startTime);
-
+    public MessageReceiver(
+            SubscriptionManager subscriptionManager,
+            ResponseMonitor monitor,
+            CheckRule checkRule,
+            Direction direction
+    ) {
+        super(monitor);
+        this.subscriptionManager = Objects.requireNonNull(subscriptionManager, "'Subscription manager' parameter");
+        this.direction = Objects.requireNonNull(direction, "'Direction' parameter");
+        this.checkRule = Objects.requireNonNull(checkRule, "'Check rule' parameter");
+        this.subscriptionManager.register(direction, callback);
     }
 
-    public void awaitSync(long timeout, TimeUnit timeUnit) throws InterruptedException {
-        if (getResponseMessage() == null) {
-            // TODO: is there any chance to call #signalAboutReceived at this moment?
-            // if it is what will be the result? Will we wait till the timeout exceeded?
-            try {
-                responseLock.lock();
-                responseReceivedCondition.await(timeout, timeUnit);
-            } finally {
-                responseLock.unlock();
-            }
-        }
+    public void close() {
+        subscriptionManager.unregister(direction, callback);
     }
 
+    @Override
+    @Nullable
     public Message getResponseMessage() {
         return firstMatch;
     }
 
-    public void close() {
-        this.callbackList.remove(callback);
+    @Override
+    public Collection<MessageID> processedMessageIDs() {
+        return checkRule.processedIDs();
     }
 
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {
@@ -78,21 +79,12 @@ public class MessageReceiver implements AutoCloseable {
                 if (checkRule.onMessage(message)) {
                     firstMatch = message;
                     signalAboutReceived();
-                    LOGGER.debug("Found first match '{}'. Skip other messages", message);
+                    LOGGER.debug("Found first match '{}'. Skip other messages", TextFormat.shortDebugString(message));
                     break;
                 }
             }
         } catch (RuntimeException e) {
             LOGGER.error("Could not process incoming message", e);
-        }
-    }
-
-    private void signalAboutReceived() {
-        try {
-            responseLock.lock();
-            responseReceivedCondition.signalAll();
-        } finally {
-            responseLock.unlock();
         }
     }
 

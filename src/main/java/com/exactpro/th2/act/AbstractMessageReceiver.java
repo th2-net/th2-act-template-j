@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,32 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.exactpro.th2.act;
 
 import java.util.Collection;
+import java.util.Objects;
 
 import javax.annotation.Nullable;
 
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
 
-public interface CheckRule {
-    /**
-     * Checks if the messages matches the rule
-     * @param message the message to check
-     * @return {@code true} if message matches the rule Otherwise, returns {@code false}
-     */
-    boolean onMessage(Message message);
+public abstract class AbstractMessageReceiver implements AutoCloseable {
+    private final ResponseMonitor monitor;
 
-    /**
-     * The collections of {@link MessageID} that was processed by rule
-     */
-    Collection<MessageID> processedIDs();
+    protected AbstractMessageReceiver(ResponseMonitor monitor) {
+        this.monitor = Objects.requireNonNull(monitor, "'Monitor' parameter");
+    }
 
-    /**
-     * Matched response
-     * @return the matched response or {@code null}
-     */
+    @Override
+    public abstract void close();
+
     @Nullable
-    Message getResponse();
+    public abstract Message getResponseMessage();
+
+    public abstract Collection<MessageID> processedMessageIDs();
+
+    protected void signalAboutReceived() {
+        monitor.responseReceived();
+    }
 }
