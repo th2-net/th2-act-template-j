@@ -131,7 +131,7 @@ bintray {
 dependencies {
     api platform('com.exactpro.th2:bom:2.10.1')
 
-    implementation "com.exactpro.th2:common:3.6.0"
+    implementation "com.exactpro.th2:common:3.13.0"
     implementation "com.exactpro.th2:grpc-act-template:3.1.0"
     implementation "com.exactpro.th2:grpc-check1:3.1.0"
 
