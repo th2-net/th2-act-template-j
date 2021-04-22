@@ -1,4 +1,6 @@
-# Overview
+# th2 act template (3.2.1)
+
+## Overview
 
 Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or other components can call these functions via gRPC.
 Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2 component type allows for often used logic from script into it and then share it between all th2 components.
@@ -52,3 +54,17 @@ spec:
               expected-value: conn2_session_alias
               operation: EQUAL
 ```
+
+## Release Notes
+
+### 3.2.1
+
++ removed gRPC event loop handling
++ fixed dictionary reading
+
+### 3.2.0
+
++ reads dictionaries from the /var/th2/config/dictionary folder.
++ uses mq_router, grpc_router, cradle_manager optional JSON configs from the /var/th2/config folder
++ tries to load log4j.properties files from sources in order: '/var/th2/config', '/home/etc', configured path via cmd, default configuration
++ update Cradle version. Introduce async API for storing events
