@@ -19,6 +19,7 @@ import static com.google.protobuf.TextFormat.shortDebugString;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -66,8 +67,21 @@ public class FieldCheckRule extends AbstractSingleConnectionRule {
     }
 
     private boolean checkExpectedField(MessageOrBuilder message, String fieldName) {
-        Value value = message.getFieldsMap().get(fieldName);
-        return value != null
-                && Objects.equals(expectedFieldValue, value.getSimpleValue());
+        Value actualFieldValue = message.getFieldsMap().get(fieldName);
+        if (actualFieldValue != null){
+            return Objects.equals(expectedFieldValue, actualFieldValue.getSimpleValue());
+        }
+        AtomicBoolean result = new AtomicBoolean(false);
+        message.getFieldsMap().forEach((key, value) -> {
+            if (value.hasMessageValue()) {
+                result.set(result.get() || checkExpectedField(value.getMessageValue(), fieldName));
+            }
+            if (value.hasListValue()) {
+                for (Value listEntry : value.getListValue().getValuesList()) {
+                    result.set(result.get() || checkExpectedField(listEntry.getMessageValue(), fieldName));
+                }
+            }
+        });
+    return result.get();
     }
 }
