@@ -1,4 +1,6 @@
-# Overview
+# th2 act template (2.5.1)
+
+## Overview
 
 Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or other components can call these functions via gRPC.
 Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2 component type allows for often used logic from script into it and then share it between all th2 components.
