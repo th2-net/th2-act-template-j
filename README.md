@@ -1,4 +1,4 @@
-# th2 act template (3.2.1)
+# th2 act template (3.3.0)
 
 ## Overview
 
@@ -56,6 +56,10 @@ spec:
 ```
 
 ## Release Notes
+
+### 3.3.0
+
++ migration to Sonatype
 
 ### 3.2.1
 
