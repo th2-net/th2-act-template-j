@@ -1,4 +1,4 @@
-# th2 act template (2.5.1)
+# th2 act template (2.6.0)
 
 ## Overview
 
@@ -54,3 +54,9 @@ spec:
               expected-value: conn2_session_alias
               operation: EQUAL
 ```
+
+## Release Notes
+
+### 2.6.0
+
++ migration to Sonatype, update dependencies
