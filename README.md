@@ -59,4 +59,6 @@ spec:
 
 ### 2.6.0
 
-+ migration to Sonatype, update dependencies
++ migration to Sonatype
++ ability to get service from gRPC router via attributes
++ reading dictionary from new directory (`var/th2/config/directory`)
