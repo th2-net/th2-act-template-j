@@ -1,7 +1,11 @@
 FROM gradle:6.6-jdk11 AS build
+
 ARG nexus_url
 ARG nexus_user
 ARG nexus_password
+ARG GITHUB_ACTOR
+ARG GITHUB_TOKEN
+
 
 COPY ./ .
 RUN gradle --no-daemon clean build dockerPrepare \
