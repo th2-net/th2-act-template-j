@@ -144,7 +144,12 @@ public class ActHandler extends ActImplBase {
                 sendMessageErrorResponse(responseObserver, "Request has been cancelled by client");
             }
 
-            sendMessage(backwardCompatibilityConnectionId(request), parentId);
+            try {
+                sendMessage(backwardCompatibilityConnectionId(request), parentId);
+            } catch (Exception ex) {
+                createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
+                throw ex;
+            }
 
             SendMessageResponse response = SendMessageResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
@@ -428,7 +433,7 @@ public class ActHandler extends ActImplBase {
             //TODO remove after solving issue TH2-217
             //TODO process response
             EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(message, parentEventId.getId()))
+                    .addEvents(createSendMessageEvent(message, parentEventId))
                     .build();
             eventBatchMessageRouter.send(eventBatch, "publish", "event");
         } finally {
@@ -450,14 +455,14 @@ public class ActHandler extends ActImplBase {
                 .build();
     }
 
-    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, String parentEventId) throws JsonProcessingException {
+    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {
         Event event = start()
                 .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");
         TreeTable parametersTable = EventUtils.toTreeTable(message);
         event.status(Status.PASSED);
         event.bodyData(parametersTable);
         event.type("Outgoing message");
-        return event.toProtoEvent(parentEventId);
+        return event.toProto(parentEventId);
     }
 
     private void createAndStoreErrorEvent(String actName, String message,Instant start,EventID parentEventId) throws JsonProcessingException {
@@ -467,7 +472,7 @@ public class ActHandler extends ActImplBase {
                 .type("Error")
                 .status(FAILED)
                 .bodyData(new MessageBuilder().text(message).build());
-        storeEvent(errorEvent.toProtoEvent(parentEventId.getId()));
+        storeEvent(errorEvent.toProto(parentEventId));
     }
 
     private void storeEvent(com.exactpro.th2.common.grpc.Event eventRequest) {
