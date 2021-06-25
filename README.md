@@ -1,4 +1,4 @@
-# th2 act template (3.3.0)
+# th2 act template (3.3.1)
 
 ## Overview
 
@@ -56,6 +56,10 @@ spec:
 ```
 
 ## Release Notes
+
+### 3.3.1
+
++ add creation of error event in case the `sendMessage` call did not success
 
 ### 3.3.0
 
