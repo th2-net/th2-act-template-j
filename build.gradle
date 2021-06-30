@@ -1,18 +1,15 @@
 buildscript {
     repositories {
         maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/th2-net/th2-gradle-plugin")
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
-            }
-        }
-        dependencies {
-            classpath "com.exactpro.th2:th2-gradle-plugin:0.1.7"
+            name 'Sonatype_snapshots'
+            url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
         }
     }
+    dependencies {
+        classpath "com.exactpro.th2:box-descriptor-generator:0.1.8-sonatype_publish-985900696-SNAPSHOT"
+    }
 }
+
 
 plugins {
     id 'com.palantir.docker' version '0.25.0'
