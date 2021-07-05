@@ -1,4 +1,4 @@
-# th2 act template (3.3.2)
+# th2 act template (3.4.1)
 
 ## Overview
 
@@ -57,7 +57,7 @@ spec:
 
 ## Release Notes
 
-### 3.3.2
+### 3.4.1
 
 + Make logs more detailed
 
