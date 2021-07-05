@@ -119,7 +119,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place an order. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place an order. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderFIX has finished");
         }
@@ -160,7 +160,7 @@ public class ActHandler extends ActImplBase {
 
         } catch (RuntimeException | IOException e) {
             LOGGER.error("Failed to send a message. Message = {}", request.getMessage(), e);
-            sendMessageErrorResponse(responseObserver, "Send message failed. See the logs.");
+            sendMessageErrorResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
         }
@@ -174,7 +174,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")), "placeOrderMassCancelRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderMassCancelRequestFIX finished");
         }
@@ -188,7 +188,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")), "placeQuoteCancelFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteCancelFIX has finished");
         }
@@ -202,7 +202,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")), "placeQuoteRequestFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteRequestFIX has finished");
         }
@@ -216,7 +216,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("RFQID"), "QuoteStatusReport", CheckMetadata.passOn("RFQID")), "placeQuoteResponseFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteResponseFIX has finished");
         }
@@ -230,7 +230,7 @@ public class ActHandler extends ActImplBase {
                     ImmutableMap.of("QuoteAck", CheckMetadata.passOn("RFQID")), "placeQuoteFIX");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a Quote. See the logs.");
+            sendErrorResponse(responseObserver, "Failed to place a Quote. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteFIX has finished");
         }
