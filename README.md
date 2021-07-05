@@ -60,6 +60,8 @@ spec:
 ### 3.4.1
 
 + Make gRPC response objects contain logs about the errors happened in gRPC methods
++ Fixed configuration for gRPC server.
+    + Added the property workers, which changes the count of gRPC server's threads
 
 ### 3.3.1
 
