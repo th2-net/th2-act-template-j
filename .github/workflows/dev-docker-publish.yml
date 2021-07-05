@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       # Prepare custom build version
+      - uses: actions/setup-java@v1
+        with:
+          java-version: 11
       - name: Get branch name
         id: branch
         run: echo ::set-output name=branch_name::${GITHUB_REF#refs/*/}
@@ -40,10 +43,23 @@ jobs:
           password: ${{ secrets.CR_PAT }}
       - run: echo "::set-output name=REPOSITORY_NAME::$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')"
         id: meta
+      - name: Generate .proto description json
+        id: proto_json
+        run: |
+          gradle generateServiceDescriptions
+          echo "::set-output name=DESCRIPTION_JSON::$(cat serviceProtoDescription)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
           push: true
+          build-args: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            GITHUB_ACTOR=${{ github.actor }}
           tags: ghcr.io/${{ github.repository }}:${{ steps.release_ver.outputs.value }}
-          labels: com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.ver.outputs.value }}
+          labels: |
+            com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.ver.outputs.value }}
+            protobuf-description-base64=${{ steps.proto_json.outputs.DESCRIPTION_JSON }}
+
