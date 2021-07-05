@@ -59,7 +59,7 @@ spec:
 
 ### 3.4.1
 
-+ Make logs more detailed
++ Make gRPC response objects contain logs about the errors happened in gRPC methods
 
 ### 3.3.1
 
