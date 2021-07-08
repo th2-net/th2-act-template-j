@@ -56,7 +56,7 @@ spec:
 ```
 ## Descriptor gradle plugin
 
-Also recommened to apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows to generate gRPC desciptors and attach them to the docker image. They can be used in projects that implement gRPC interface or dynamically use it (like act-ui).
+Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows generating a th2 descriptor. CI should publish the project's docker image with the descriptor content as the value of the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 
 ## Release Notes
