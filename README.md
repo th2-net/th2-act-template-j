@@ -54,6 +54,10 @@ spec:
               expected-value: conn2_session_alias
               operation: EQUAL
 ```
+## Descriptor gradle plugin
+
+Also recommened to apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows to generate gRPC desciptors and attach them to the docker image. They can be used in projects that implement gRPC interface or dynamically use it (like act-ui).
+
 
 ## Release Notes
 
