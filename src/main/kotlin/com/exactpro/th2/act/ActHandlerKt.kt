@@ -22,78 +22,51 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder
 import com.exactpro.th2.act.grpc.PlaceMessageResponse
 import com.exactpro.th2.act.grpc.SendMessageResponse
 import com.exactpro.th2.act.impl.MessageResponseMonitor
+import com.exactpro.th2.act.receiver.AbstractMessageReceiver
 import com.exactpro.th2.act.receiver.MessageReceiver
 import com.exactpro.th2.act.rule.FieldCheckRuleKt
 import com.exactpro.th2.act.utils.CheckMetadata
-import com.exactpro.th2.act.utils.EventUtils
-import com.exactpro.th2.act.utils.EventUtils.createSendMessageEvent
-import com.exactpro.th2.act.utils.ReceiverContext
-import com.exactpro.th2.act.utils.ReceiverContext.NoResponseBodySupplier
-import com.exactpro.th2.act.utils.ReceiverContext.ReceiverSupplier
 import com.exactpro.th2.check1.grpc.Check1Service
 import com.exactpro.th2.check1.grpc.CheckpointRequest
 import com.exactpro.th2.common.event.Event
-import com.exactpro.th2.common.event.IBodyData
-import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.common.schema.message.MessageRouter
 import com.google.common.collect.ImmutableMap
-import com.google.protobuf.TextFormat
+import com.exactpro.th2.common.grpc.EventBatch
+import com.exactpro.th2.common.event.Event.Status.FAILED
+import com.exactpro.th2.common.event.Event.Status.PASSED
+import com.exactpro.th2.common.event.EventUtils.createMessageBean
+import com.exactpro.th2.common.grpc.Checkpoint
+import com.exactpro.th2.common.grpc.ConnectionID
+import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.common.grpc.EventID
+import com.exactpro.th2.common.grpc.Value.KindCase.SIMPLE_VALUE
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.MessageMetadata
+import com.exactpro.th2.common.grpc.RequestStatus
+import com.exactpro.th2.common.grpc.Value
+import com.exactpro.th2.common.message.getField
+import com.exactpro.th2.common.message.messageType
+import com.exactpro.th2.common.message.toTreeTable
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.google.protobuf.TextFormat.shortDebugString
 import com.google.protobuf.util.JsonFormat
-import com.exactpro.th2.act.receiver.AbstractMessageReceiver
 import io.grpc.Context
 import io.grpc.Deadline
 import io.grpc.stub.StreamObserver
 import mu.KotlinLogging
+import org.apache.commons.lang3.BooleanUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import java.time.Instant
 import java.util.concurrent.TimeUnit
-import java.util.stream.Collectors
 
 class ActHandlerKt(
     private val messageRouter: MessageRouter<MessageBatch>,
     private val subscriptionManager: SubscriptionManager,
-    private val eventBatchMessageRouter: MessageRouter<EventBatch>,
+    private val eventRouter: MessageRouter<EventBatch>,
     private val verifierConnector: Check1Service
 ) : ActImplBase() {
-
-    override fun sendMessage(
-        request: PlaceMessageRequest,
-        responseObserver: StreamObserver<SendMessageResponse>
-    ) {
-        val startPlaceMessage = System.currentTimeMillis()
-        runCatching {
-            LOGGER.debug { "Sending  message request: $request" }
-
-            val actName = "sendMessage"
-            // FIXME store parent with fail in case of children fail
-            val parentId: EventID = createAndStoreParentEvent(request, actName, Event.Status.PASSED)
-
-            val checkpoint: Checkpoint = verifierConnector.registerCheckPoint(parentId)
-            if (Context.current().isCancelled) {
-                LOGGER.warn { "'$actName' request cancelled by client" }
-                responseObserver.sendMessageErrorResponse("Request has been cancelled by client")
-            }
-
-            runCatching {
-                sendMessage(backwardCompatibilityConnectionId(request), parentId)
-            }.onFailure {
-                eventBatchMessageRouter.storeErrorEvent("sendMessage", Instant.now(), parentId, it)
-                throw it
-            }
-
-            val response = SendMessageResponse.newBuilder()
-                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS).build())
-                    .setCheckpointId(checkpoint).build()
-
-            responseObserver.onNext(response)
-            responseObserver.onCompleted()
-        }.onFailure {
-            LOGGER.error(it) { "Failed to send a message. Message = ${request.message}" }
-            responseObserver.sendMessageErrorResponse("Send message failed. Error: ${it.message}")
-        }.onSuccess {
-            LOGGER.debug { "Sending the message successfully finished in ${System.currentTimeMillis() - startPlaceMessage}" }
-        }
-    }
 
     override fun placeOrderFIX(
         request: PlaceMessageRequest,
@@ -101,14 +74,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeOrderFIX request: $request}" }
-
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "NewOrderSingle",
-                    request.message.fieldsMap["ClOrdID"]!!.simpleValue,
-                    mapOf("ExecutionReport" to CheckMetadata.passOn("ClOrdID"),
-                            "BusinessMessageReject" to CheckMetadata.failOn("BusinessRejectRefID")),
-                    "placeOrderFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["ClOrdID"])
+            val settings = CallSettings("placeOrderFIX", expectedValue.simpleValue, mapOf("ExecutionReport" to "ClOrdID", "BusinessMessageReject" to "BusinessRejectRefID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an order. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place an order. Error: ${it.message}")
@@ -123,13 +91,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeOrderMassCancelRequestFIX request: $request" }
-
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "OrderMassCancelRequest",
-                    request.message.fieldsMap["ClOrdID"]!!.simpleValue,
-                    mapOf("OrderMassCancelReport" to CheckMetadata.passOn("ClOrdID")),
-                    "placeOrderMassCancelRequestFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["ClOrdID"])
+            val settings = CallSettings("placeOrderMassCancelRequestFIX", expectedValue.simpleValue, mapOf("OrderMassCancelReport" to "ClOrdID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an OrderMassCancelRequest. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place an OrderMassCancelRequest. Error: ${it.message}")
@@ -144,12 +108,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeQuoteCancelFIX request: $request" }
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "QuoteCancel",
-                    request.message.fieldsMap["QuoteMsgID"]!!.simpleValue,
-                    ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")),
-                    "placeQuoteCancelFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["QuoteMsgID"])
+            val settings = CallSettings("placeQuoteCancelFIX", expectedValue.simpleValue, mapOf("MassQuoteAcknowledgement" to "QuoteID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an QuoteCancel. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place a QuoteCancel. Error: ${it.message}")
@@ -164,12 +125,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeQuoteRequestFIX request: $request" }
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "QuoteRequest",
-                    request.message.fieldsMap["QuoteReqID"]!!.simpleValue,
-                    mapOf("QuoteStatusReport" to CheckMetadata.passOn("QuoteReqID")),
-                    "placeQuoteRequestFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["QuoteReqID"])
+            val settings = CallSettings("placeQuoteRequestFIX", expectedValue.simpleValue, mapOf("QuoteStatusReport" to "QuoteReqID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an QuoteRequest. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place a QuoteRequest. Error: ${it.message}")
@@ -184,13 +142,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeQuoteResponseFIX request: $request" }
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "QuoteResponse",
-                    request.message.fieldsMap["RFQID"]!!.simpleValue,
-                    mapOf("ExecutionReport" to CheckMetadata.passOn("RFQID"),
-                            "QuoteStatusReport" to CheckMetadata.passOn("RFQID")),
-                    "placeQuoteResponseFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["RFQID"])
+            val settings = CallSettings("placeQuoteResponseFIX", expectedValue.simpleValue, mapOf("ExecutionReport" to "RFQID", "QuoteStatusReport" to "RFQID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an QuoteResponse. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place a QuoteResponse. Error: ${it.message}")
@@ -205,12 +159,9 @@ class ActHandlerKt(
     ) {
         runCatching {
             LOGGER.debug { "placeQuoteFIX request: $request" }
-            placeMessageFieldRule(request,
-                    responseObserver,
-                    "Quote",
-                    request.message.fieldsMap["RFQID"]!!.simpleValue,
-                    mapOf("QuoteAck" to CheckMetadata.passOn("RFQID")),
-                    "placeQuoteFIX")
+            val expectedValue = requireNotNull(request.message.fieldsMap["RFQID"])
+            val settings = CallSettings("placeQuoteFIX", expectedValue.simpleValue, mapOf("QuoteAck" to "RFQID"))
+            placeMessage(settings, request, responseObserver)
         }.onFailure {
             LOGGER.error(it) { "Failed to place an Quote. Message = ${request.message}" }
             responseObserver.sendErrorResponse("Failed to place a Quote. Error: ${it.message}")
@@ -219,76 +170,76 @@ class ActHandlerKt(
         }
     }
 
-    /**
-     *
-     * @param expectedMessages mapping between response and the event status that should be applied in that case
-     * @param noResponseBodySupplier supplier for [IBodyData] that will be added to the event in case there is not response received
-     * @param receiver supplier for the [AbstractMessageReceiver] that will await for the required message
-     */
-    private fun placeMessage(
-        request: PlaceMessageRequest,
-        responseObserver: StreamObserver<PlaceMessageResponse>,
-        expectedRequestType: String,
-        expectedMessages: Map<String, CheckMetadata>,
-        actName: String,
-        noResponseBodySupplier: NoResponseBodySupplier,
-        receiver: ReceiverSupplier
-    ) {
-
-        val startPlaceMessage = System.currentTimeMillis()
-        val message: Message = backwardCompatibilityConnectionId(request)
-        requireMessageType(expectedRequestType, message.metadata)
-        val requestConnId = message.metadata.id.connectionId
-        val parentId: EventID = createAndStoreParentEvent(request, actName, Event.Status.PASSED)
-        val checkpoint: Checkpoint = verifierConnector.registerCheckPoint(parentId)
-        val monitor = MessageResponseMonitor()
-
+    private fun placeMessage(settings: CallSettings, request: PlaceMessageRequest, responseObserver: StreamObserver<PlaceMessageResponse>) {
+        LOGGER.debug { "Begin place ${settings.name} ${shortDebugString(request)}" }
         runCatching {
-            receiver.create(monitor, ReceiverContext(requestConnId, parentId)).use { messageReceiver ->
-                if (isSendPlaceMessage(message, responseObserver, parentId)) {
-                    val startAwaitSync = System.currentTimeMillis()
-                    val timeout = getTimeout(Context.current().deadline)
+            val startTime = Instant.now()
+            val actEventId = createAndStoreParentEvent(request, settings.name, PASSED)
+
+            runCatching {
+                val message: Message = backwardCompatibilityConnectionId(request)
+                val requestConnId = message.metadata.id.connectionId
+
+                val checkpoint = registerCheckPoint(actEventId)
+                val monitor = MessageResponseMonitor()
+
+                createMessageReceiver(settings.expectedValue, settings.expectedFields, monitor, requestConnId).use { messageReceiver ->
+                    sendMessages(settings.name, actEventId, startTime, message)
+                    val timeout: Long = getTimeout(Context.current().deadline)
                     monitor.awaitSync(timeout, TimeUnit.MILLISECONDS)
-                    LOGGER.debug { "messageReceiver.awaitSync for $actName in ${System.currentTimeMillis() - startAwaitSync} ms" }
-                    if (Context.current().isCancelled) {
-                        LOGGER.warn { "'$actName' request cancelled by client" }
-                        responseObserver.sendErrorResponse("The request has been cancelled by the client")
-                    } else {
-                        processResponseMessage(actName,
-                                responseObserver,
-                                checkpoint,
-                                parentId,
-                                messageReceiver.responseMessage,
-                                expectedMessages,
-                                timeout,
-                                messageReceiver.processedMessageIDs(),
-                                noResponseBodySupplier)
-                    }
+                    messageReceiver.processResponseMessage(settings.name, checkpoint, actEventId, responseObserver, timeout)
                 }
+            }.onFailure {
+                eventRouter.storeErrorEvent(settings.name, startTime, actEventId, it)
+                throw it
             }
-        }.onFailure {
-            LOGGER.error(it) { "'$actName' internal error: ${it.message}" }
-            eventBatchMessageRouter.storeErrorEvent(actName, Instant.ofEpochMilli(startPlaceMessage), parentId, it)
-            responseObserver.sendErrorResponse("InternalError: ${it.message}")
+
+        }.onFailure { it ->
+            LOGGER.error(it) { "Failed to place ${settings.name}" }
+            responseObserver.sendErrorResponse("Failed to place ${settings.name}, error: ${it.message}")
         }
-        LOGGER.debug { "placeMessage for $actName in ${System.currentTimeMillis() - startPlaceMessage} ms" }
+        LOGGER.debug { "End place ${settings.name}" }
     }
 
-    private fun placeMessageFieldRule(
-        request: PlaceMessageRequest,
+    @Throws(JsonProcessingException::class)
+    fun AbstractMessageReceiver.processResponseMessage(
+        callName: String,
+        checkpoint: Checkpoint,
+        parentEventId: EventID,
         responseObserver: StreamObserver<PlaceMessageResponse>,
-        expectedRequestType: String,
-        expectedFieldValue: String,
-        expectedMessages: Map<String, CheckMetadata>,
-        actName: String
+        timeout: Long,
     ) {
-        placeMessage(request, responseObserver, expectedRequestType, expectedMessages, actName, {
-            listOf(EventUtils.createNoResponseBody(expectedMessages, expectedFieldValue))
-        }) { monitor: ResponseMonitor, context: ReceiverContext ->
-            val msgTypeToFieldName: Map<String, String> = expectedMessages.entries.stream()
-                    .collect(Collectors.toUnmodifiableMap(Map.Entry<String, CheckMetadata>::key) { value -> value.value.fieldName })
-            val checkRule: CheckRule = FieldCheckRuleKt(expectedFieldValue, msgTypeToFieldName, context.connectionID)
-            MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST)
+        responseMessage?.let { response ->
+            val status: Boolean = BooleanUtils.toBoolean(
+                    response.requiredField(REQUIRED_FIELD, SIMPLE_VALUE).simpleValue
+            )
+
+            eventRouter.tryStoreEvent(Event.start().apply {
+                name("$callName: Received '${response.messageType}' response message")
+                type("message")
+                status(if (status) PASSED else FAILED)
+                bodyData(response.toTreeTable())
+                messageID(response.metadata.id)
+            }.toProtoEvent(parentEventId.id))
+
+            val response = PlaceMessageResponse.newBuilder().apply {
+                responseMessage = responseMessage
+                statusBuilder.apply {
+                    this.status = if (status) RequestStatus.Status.SUCCESS else RequestStatus.Status.ERROR
+                }
+                checkpointId = checkpoint
+            }.build()
+
+            responseObserver.onNext(response)
+            responseObserver.onCompleted()
+        } ?: run {
+            val message = "$callName: No response message has been received in '$timeout' ms"
+            eventRouter.tryStoreEvent(Event.start().apply {
+                name(message)
+                type("No response found")
+                status(FAILED)
+                processedMessageIDs().forEach(this::messageID)
+            }.toProtoEvent(parentEventId.id))
         }
     }
 
@@ -308,8 +259,7 @@ class ActHandlerKt(
         val protoEvent = event.toProtoEvent(request.parentEventId.id)
         //FIXME process response
         return protoEvent.runCatching {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProtoEvent(request.parentEventId.id))
-                    .build(), "publish", "event")
+            eventRouter.send(EventBatch.newBuilder().addEvents(event.toProtoEvent(request.parentEventId.id)).build(), "publish", "event")
             LOGGER.debug { "createAndStoreParentEvent for $actName in ${System.currentTimeMillis() - startTime} ms" }
             protoEvent.id
         }.onFailure {
@@ -317,133 +267,26 @@ class ActHandlerKt(
         }.getOrThrow()
     }
 
-    private fun createAndStoreNoResponseEvent(
-        actName: String,
-        noResponseBodySupplier: NoResponseBodySupplier,
-        start: Instant,
-        parentEventId: EventID,
-        messageIDList: Collection<MessageID>
-    ) {
-        val errorEvent = Event.from(start).apply {
-            name("Internal $actName error")
-            type("No response found by target keys.")
-            status(Event.Status.FAILED)
-        }.endTimestamp()
-
-        for (data in noResponseBodySupplier.createNoResponseBody()) {
-            errorEvent.bodyData(data)
-        }
-        for (msgID in messageIDList) {
-            errorEvent.messageID(msgID)
-        }
-
-        eventBatchMessageRouter.tryStoreEvent(errorEvent.toProtoEvent(parentEventId.id))
-    }
-
-    private fun processResponseMessage(
-        actName: String,
-        responseObserver: StreamObserver<PlaceMessageResponse>,
-        checkpoint: Checkpoint,
-        parentEventId: EventID,
-        responseMessage: Message?,
-        expectedMessages: Map<String, CheckMetadata>,
-        timeout: Long,
-        messageIDList: Collection<MessageID>,
-        noResponseBodySupplier: NoResponseBodySupplier
-    ) {
-        val startTime = System.currentTimeMillis()
-        val message = "No response message has been received in '$timeout' ms"
-
-        if (responseMessage == null) {
-            createAndStoreNoResponseEvent(actName, noResponseBodySupplier, Instant.now(), parentEventId, messageIDList)
-            responseObserver.sendErrorResponse(message)
-        } else {
-            val metadata = responseMessage.metadata
-            val messageType = metadata.messageType
-            val checkMetadata = expectedMessages[messageType]
-            val parametersTable = EventUtils.toTreeTable(responseMessage)
-
-            requireNotNull(checkMetadata) { "CheckMetadata wasn't found in expectedMessages param by key $messageType" }
-
-            eventBatchMessageRouter.tryStoreEvent(Event.start().apply {
-                name("Received '$messageType' response message")
-                type("message")
-                status(checkMetadata.eventStatus)
-                bodyData(parametersTable)
-                messageID(metadata.id)
-            }.toProtoEvent(parentEventId.id))
-
-            val response = PlaceMessageResponse.newBuilder().apply {
-                setResponseMessage(responseMessage)
-                status = RequestStatus.newBuilder().setStatus(checkMetadata.requestStatus).build()
-                checkpointId = checkpoint
-            }.build()
-
-            responseObserver.onNext(response)
-            responseObserver.onCompleted()
-        }
-        LOGGER.debug { "processResponseMessage for $actName in ${System.currentTimeMillis() - startTime} ms" }
-    }
-
-    private fun isSendPlaceMessage(
-        message: Message,
-        responseObserver: StreamObserver<PlaceMessageResponse>,
-        parentEventId: EventID
-    ): Boolean {
-        val startTime = System.currentTimeMillis()
-        return runCatching {
-            sendMessage(message, parentEventId)
-            true
-        }.onFailure {
-            LOGGER.error(it) { "Could not send message to queue" }
-            responseObserver.sendErrorResponse("Could not send message to queue: ${it.message}")
-        }.onSuccess {
-            LOGGER.debug { "isSendPlaceMessage in ${System.currentTimeMillis() - startTime} ms" }
-        }.getOrDefault(false)
-    }
-
-    private fun sendMessage(message: Message, parentEventId: EventID) {
+    private fun sendMessages(callName: String, parentEventId: EventID, instant: Instant, vararg messages: Message) {
+        LOGGER.debug { "Sending the message started" }
         runCatching {
-            LOGGER.debug { "Sending the message started" }
+            messageRouter.send(MessageBatch.newBuilder().apply {
+                messages.forEach { message ->
+                    addMessages(message)
+                }
+            }.build())
+            eventRouter.tryStoreEvent(Event.from(instant).endTimestamp().apply {
+                name("$callName: Send '${messages.map(Message::messageType).joinToString(",")}' message(s) to codec pipeline")
+                type("Outgoing message")
+                status(PASSED)
 
-            //May be use in future for filtering
-            //request.getConnectionId().getSessionAlias();
-            messageRouter.send(MessageBatch.newBuilder()
-                    .addMessages(Message.newBuilder(message).setParentEventId(parentEventId).build())
-                    .build())
-            //TODO remove after solving issue TH2-217
-            //TODO process response
-            val eventBatch: EventBatch =
-                    EventBatch.newBuilder().addEvents(createSendMessageEvent(message, parentEventId)).build()
-            eventBatchMessageRouter.send(eventBatch, "publish", "event")
+                messages.forEach { message ->
+                    bodyData(message.toTreeTable())
+                }
+
+            }.toProtoEvent(parentEventId.id))
         }
         LOGGER.debug { "Sending the message ended" }
-    }
-
-
-    private fun convertMessage(message: MessageOrBuilder): Map<String, Any> {
-        val fields: MutableMap<String, Any> = HashMap()
-        message.fieldsMap.forEach { (key: String, value: Value) ->
-            fields[key] = if (value.hasMessageValue()) {
-                convertMessage(value.messageValue)
-            } else if (value.hasListValue()) {
-                convertList(value.listValue)
-            } else {
-                value.simpleValue
-            }
-        }
-        return fields
-    }
-
-    private fun convertList(listValue: ListValueOrBuilder): Any {
-        val valuesList = listValue.valuesList
-        if (valuesList.isEmpty()) return ArrayList<Any>()
-
-        return if (valuesList[0].hasMessageValue()) {
-            valuesList.stream().map { value: Value -> convertMessage(value.messageValue) }.collect(Collectors.toList())
-        } else {
-            valuesList.stream().map { value: Value -> if (valuesList[0].hasListValue()) convertList(value.listValue) else value.simpleValue }.collect(Collectors.toList())
-        }
     }
 
     private fun StreamObserver<PlaceMessageResponse>.sendErrorResponse(message: String) {
@@ -457,82 +300,96 @@ class ActHandlerKt(
         LOGGER.debug { "Error response : $message" }
     }
 
-    private fun StreamObserver<SendMessageResponse>.sendMessageErrorResponse(message: String) {
-        onNext(SendMessageResponse.newBuilder()
-                .setStatus(RequestStatus.newBuilder()
-                        .setStatus(RequestStatus.Status.ERROR)
-                        .setMessage(message)
-                        .build())
-                .build())
-        onCompleted()
-        LOGGER.debug { "Error response : $message" }
+    private fun createMessageReceiver(
+        expectedFieldValue: String,
+        expectedMessages: Map<String, String>,
+        monitor: MessageResponseMonitor,
+        connectionId: ConnectionID
+    ): MessageReceiver {
+        return MessageReceiver(
+                subscriptionManager,
+                monitor,
+                FieldCheckRuleKt(
+                        expectedFieldValue,
+                        expectedMessages,
+                        connectionId
+                ),
+                Direction.FIRST
+        )
+    }
+
+    data class CallSettings(
+        val name: String,
+        val expectedValue: String,
+        val expectedFields: Map<String, String>
+    )
+
+    private fun registerCheckPoint(parentEventId: EventID): Checkpoint {
+        LOGGER.debug { "Registering the checkpoint started" }
+        val response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder().setParentEventId(parentEventId).build())
+        LOGGER.debug { "Registering the checkpoint ended. Response ${shortDebugString(response)}" }
+        return response.checkpoint
+    }
+
+    // TODO: move to common lib
+    private fun Message.requiredField(fieldName: String, kind: Value.KindCase) = requireNotNull(getField(fieldName)) {
+        "Message doesn't contain the $fieldName required field, content ${shortDebugString(this)}"
+    }.also {
+        check(it.kindCase == kind) {
+            "The $fieldName field with value ${shortDebugString(it)} has incorrect kind, expected: $kind, actual: ${it.kindCase}"
+        }
+    }
+
+    private fun MessageRouter<EventBatch>.tryStoreEvent(eventRequest: com.exactpro.th2.common.grpc.Event) {
+        eventRequest.runCatching {
+            send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event")
+        }.onFailure {
+            LOGGER.error(it) { "Could not store event" }
+        }.onSuccess {
+            LOGGER.debug { "Event stored: ${JsonFormat.printer().omittingInsignificantWhitespace().print(eventRequest)}" }
+        }
+    }
+
+    private fun MessageRouter<EventBatch>.storeErrorEvent(
+        actName: String,
+        start: Instant,
+        parentEventId: EventID,
+        throwable: Throwable?
+    ) = Event.from(start).endTimestamp().apply {
+        name("Internal $actName error")
+        type("Error")
+        status(FAILED)
+
+        var error = throwable
+
+        while (error != null) {
+            bodyData(createMessageBean(ExceptionUtils.getMessage(error)))
+            error = error.cause
+        }
+        tryStoreEvent(this.toProtoEvent(parentEventId.id))
+    }
+
+    private fun backwardCompatibilityConnectionId(request: PlaceMessageRequest): Message {
+        val connectionId = request.message.metadata.id.connectionId
+        return if (connectionId.sessionAlias.isNotEmpty()) {
+            request.message
+        } else {
+            Message.newBuilder(request.message).mergeMetadata(
+                    MessageMetadata.newBuilder().mergeId(
+                            MessageID.newBuilder().setConnectionId(request.connectionId).build()
+                    ).build()
+            ).build()
+        }
     }
 
     companion object {
         private val LOGGER = KotlinLogging.logger {}
 
+        private const val REQUIRED_FIELD = "REQUIRED_FIELD"
         private const val DEFAULT_RESPONSE_TIMEOUT = 10_000
 
         private fun getTimeout(deadline: Deadline?): Long {
             return deadline?.timeRemaining(TimeUnit.MILLISECONDS) ?: DEFAULT_RESPONSE_TIMEOUT.toLong()
-        }
-
-        private fun requireMessageType(
-            expectedMessageType: String,
-            metadata: MessageMetadata
-        ) {
-            require(expectedMessageType == metadata.messageType) {
-                "Unsupported message type '${metadata.messageType}', expected '${expectedMessageType}'"
-            }
-        }
-
-        private fun MessageRouter<EventBatch>.tryStoreEvent(eventRequest: com.exactpro.th2.common.grpc.Event) {
-            eventRequest.runCatching {
-                send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event")
-            }.onFailure {
-                LOGGER.error(it) { "Could not store event" }
-            }.onSuccess {
-                LOGGER.debug { "Event stored: ${JsonFormat.printer().omittingInsignificantWhitespace().print(eventRequest)}" }
-            }
-        }
-
-        private fun MessageRouter<EventBatch>.storeErrorEvent(
-            actName: String,
-            start: Instant,
-            parentEventId: EventID,
-            throwable: Throwable?
-        ) = Event.from(start).endTimestamp().apply {
-            name("Internal $actName error")
-            type("Error")
-            status(Event.Status.FAILED)
-
-            var error = throwable
-
-            while (error != null) {
-                bodyData(com.exactpro.th2.common.event.EventUtils.createMessageBean(ExceptionUtils.getMessage(error)))
-                error = error.cause
-            }
-            tryStoreEvent(this.toProtoEvent(parentEventId.id))
-        }
-
-        private fun Check1Service.registerCheckPoint(parentEventId: EventID): Checkpoint {
-            LOGGER.debug { "Registering the checkpoint started" }
-            val response = createCheckpoint(CheckpointRequest.newBuilder().setParentEventId(parentEventId).build())
-            LOGGER.debug { "Registering the checkpoint ended. Response ${TextFormat.shortDebugString(response)}" }
-            return response.checkpoint
-        }
-
-        private fun backwardCompatibilityConnectionId(request: PlaceMessageRequest): Message {
-            val connectionId = request.message.metadata.id.connectionId
-            return if (connectionId.sessionAlias.isNotEmpty()) {
-                request.message
-            } else {
-                Message.newBuilder(request.message).mergeMetadata(
-                        MessageMetadata.newBuilder().mergeId(
-                                MessageID.newBuilder().setConnectionId(request.connectionId).build()
-                        ).build()
-                ).build()
-            }
         }
     }
 
