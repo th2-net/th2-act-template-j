@@ -1,5 +1,5 @@
-/******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,23 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
-package com.exactpro.th2.act;
+ */
 
-import java.util.Collection;
-import java.util.Objects;
+package com.exactpro.th2.act.receiver;
 
-import javax.annotation.Nullable;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.exactpro.th2.act.CheckRule;
+import com.exactpro.th2.act.ResponseMonitor;
+import com.exactpro.th2.act.SubscriptionManager;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageListener;
 import com.google.protobuf.TextFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
+import java.util.Collection;
+import java.util.Objects;
 
 public class MessageReceiver extends AbstractMessageReceiver {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageReceiver.class);

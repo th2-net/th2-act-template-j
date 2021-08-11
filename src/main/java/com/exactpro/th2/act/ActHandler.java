@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.exactpro.th2.act;
 
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
@@ -21,7 +22,14 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
+import com.exactpro.th2.act.receiver.AbstractMessageReceiver;
+import com.exactpro.th2.act.receiver.MessageReceiver;
 import com.exactpro.th2.act.rules.FieldCheckRule;
+import com.exactpro.th2.act.utils.CheckMetadata;
+import com.exactpro.th2.act.utils.EventUtils;
+import com.exactpro.th2.act.utils.ReceiverContext;
+import com.exactpro.th2.act.utils.ReceiverContext.NoResponseBodySupplier;
+import com.exactpro.th2.act.utils.ReceiverContext.ReceiverSupplier;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
@@ -29,23 +37,20 @@ import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.Event.Status;
 import com.exactpro.th2.common.event.IBodyData;
 import com.exactpro.th2.common.event.bean.TreeTable;
-import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
-import com.exactpro.th2.common.event.bean.builder.RowBuilder;
-import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.Checkpoint;
+import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.Checkpoint;
-import com.exactpro.th2.common.grpc.RequestStatus;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.grpc.MessageOrBuilder;
-import com.exactpro.th2.common.grpc.MessageMetadata;
-import com.exactpro.th2.common.grpc.Value;
-import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.RequestStatus;
+import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
@@ -103,10 +108,6 @@ public class ActHandler extends ActImplBase {
 
     private static long getTimeout(Deadline deadline) {
         return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
-    }
-
-    private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
-        return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
     }
 
     @Override
@@ -298,7 +299,7 @@ public class ActHandler extends ActImplBase {
     private void placeMessageFieldRule(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
                                        String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
         placeMessage(request, responseObserver, expectedRequestType, expectedMessages, actName,
-                () -> Collections.singletonList(createNoResponseBody(expectedMessages, expectedFieldValue)), (monitor, context) -> {
+                () -> Collections.singletonList(EventUtils.createNoResponseBody(expectedMessages, expectedFieldValue)), (monitor, context) -> {
                     Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
                             .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
                     CheckRule checkRule = new FieldCheckRule(expectedFieldValue, msgTypeToFieldName, context.getConnectionID());
@@ -343,24 +344,6 @@ public class ActHandler extends ActImplBase {
             errorEvent.messageID(msgID);
         }
         storeEvent(errorEvent.toProtoEvent(parentEventId.getId()));
-    }
-
-    private IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
-        TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
-        CollectionBuilder passedOn = new CollectionBuilder();
-        CollectionBuilder failedOn = new CollectionBuilder();
-        for (Map.Entry<String, CheckMetadata> entry : expectedMessages.entrySet()) {
-            if (entry.getValue().eventStatus == PASSED) {
-                passedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
-            }
-            else  {
-                failedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
-            }
-        }
-        treeTableBuilder.row("PASSED on:", passedOn.build());
-        treeTableBuilder.row("FAILED on:", failedOn.build());
-
-        return treeTableBuilder.build();
     }
 
     private void processResponseMessage(String actName,
@@ -433,36 +416,12 @@ public class ActHandler extends ActImplBase {
             //TODO remove after solving issue TH2-217
             //TODO process response
             EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(message, parentEventId))
+                    .addEvents(EventUtils.createSendMessageEvent(message, parentEventId))
                     .build();
             eventBatchMessageRouter.send(eventBatch, "publish", "event");
         } finally {
             LOGGER.debug("Sending the message ended");
         }
-    }
-
-    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
-        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
-        if (!connectionId.getSessionAlias().isEmpty()) {
-            return request.getMessage();
-        }
-        return Message.newBuilder(request.getMessage())
-                .mergeMetadata(MessageMetadata.newBuilder()
-                        .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getConnectionId())
-                                .build())
-                        .build())
-                .build();
-    }
-
-    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {
-        Event event = start()
-                .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");
-        TreeTable parametersTable = EventUtils.toTreeTable(message);
-        event.status(Status.PASSED);
-        event.bodyData(parametersTable);
-        event.type("Outgoing message");
-        return event.toProto(parentEventId);
     }
 
     private void createAndStoreErrorEvent(String actName, String message,Instant start,EventID parentEventId) throws JsonProcessingException {
@@ -485,6 +444,7 @@ public class ActHandler extends ActImplBase {
             LOGGER.error("Could not store event", e);
         }
     }
+
 
     private Map<String, Object> convertMessage(MessageOrBuilder message) {
         Map<String, Object> fields = new HashMap<>();
@@ -548,73 +508,21 @@ public class ActHandler extends ActImplBase {
         return response.getCheckpoint();
     }
 
-    private static class CheckMetadata {
-        private final Status eventStatus;
-        private final RequestStatus.Status requestStatus;
-        private final String fieldName;
+    private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
+        return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
+    }
 
-        private CheckMetadata(String fieldName, Status eventStatus) {
-            this.eventStatus = requireNonNull(eventStatus, "Event status can't be null");
-            this.fieldName = requireNonNull(fieldName, "Field name can't be null");
-
-            switch (eventStatus) {
-                case PASSED:
-                    requestStatus = SUCCESS;
-                    break;
-                case FAILED:
-                    requestStatus = ERROR;
-                    break;
-                default:
-                    throw new IllegalArgumentException("Event status '" + eventStatus + "' can't be convert to request status");
-            }
-        }
-
-        public static CheckMetadata passOn(String fieldName) {
-            return new CheckMetadata(fieldName, PASSED);
-        }
-
-        public static CheckMetadata failOn(String fieldName) {
-            return new CheckMetadata(fieldName, FAILED);
-        }
-
-        public Status getEventStatus() {
-            return eventStatus;
-        }
-
-        public RequestStatus.Status getRequestStatus() {
-            return requestStatus;
-        }
-
-        public String getFieldName() {
-            return fieldName;
+    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
+        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
+        if (!connectionId.getSessionAlias().isEmpty()) {
+             return request.getMessage();
+        } else {
+            return Message.newBuilder(request.getMessage()).mergeMetadata(
+                    MessageMetadata.newBuilder().mergeId(
+                            MessageID.newBuilder().setConnectionId(request.getConnectionId()).build()
+                    ).build()
+            ).build();
         }
     }
 
-    @FunctionalInterface
-    private interface ReceiverSupplier {
-        AbstractMessageReceiver create(ResponseMonitor monitor, ReceiverContext context);
-    }
-
-    @FunctionalInterface
-    private interface NoResponseBodySupplier {
-        Collection<IBodyData> createNoResponseBody();
-    }
-
-    private static class ReceiverContext {
-        private final ConnectionID connectionID;
-        private final EventID parentId;
-
-        public ReceiverContext(ConnectionID connectionID, EventID parentId) {
-            this.connectionID = requireNonNull(connectionID, "'Connection id' parameter");
-            this.parentId = requireNonNull(parentId, "'Parent id' parameter");
-        }
-
-        public ConnectionID getConnectionID() {
-            return connectionID;
-        }
-
-        public EventID getParentId() {
-            return parentId;
-        }
-    }
 }

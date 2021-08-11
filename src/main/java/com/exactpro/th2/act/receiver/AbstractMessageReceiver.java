@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.act;
+package com.exactpro.th2.act.receiver;
 
-import java.util.Collection;
-import java.util.Objects;
-
-import javax.annotation.Nullable;
-
+import com.exactpro.th2.act.ResponseMonitor;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
+
+import javax.annotation.Nullable;
+import java.util.Collection;
+import java.util.Objects;
 
 public abstract class AbstractMessageReceiver implements AutoCloseable {
     private final ResponseMonitor monitor;

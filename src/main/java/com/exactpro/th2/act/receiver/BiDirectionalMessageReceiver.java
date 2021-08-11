@@ -14,10 +14,20 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.act;
+package com.exactpro.th2.act.receiver;
 
-import static com.google.protobuf.TextFormat.shortDebugString;
+import com.exactpro.th2.act.CheckRule;
+import com.exactpro.th2.act.ResponseMonitor;
+import com.exactpro.th2.act.SubscriptionManager;
+import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -26,21 +36,12 @@ import java.util.Queue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import javax.annotation.Nullable;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.schema.message.MessageListener;
+import static com.google.protobuf.TextFormat.shortDebugString;
 
 public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
 
     private enum State {
-        START, OUTGOING_MATCHED, INCOMING_MATCHED;
+        START, OUTGOING_MATCHED, INCOMING_MATCHED
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BiDirectionalMessageReceiver.class);
