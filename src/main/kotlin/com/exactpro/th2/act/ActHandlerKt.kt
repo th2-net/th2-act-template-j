@@ -20,17 +20,14 @@ import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase
 import com.exactpro.th2.act.grpc.PlaceMessageRequest
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder
 import com.exactpro.th2.act.grpc.PlaceMessageResponse
-import com.exactpro.th2.act.grpc.SendMessageResponse
 import com.exactpro.th2.act.impl.MessageResponseMonitor
 import com.exactpro.th2.act.receiver.AbstractMessageReceiver
 import com.exactpro.th2.act.receiver.MessageReceiver
 import com.exactpro.th2.act.rule.FieldCheckRuleKt
-import com.exactpro.th2.act.utils.CheckMetadata
 import com.exactpro.th2.check1.grpc.Check1Service
 import com.exactpro.th2.check1.grpc.CheckpointRequest
 import com.exactpro.th2.common.event.Event
 import com.exactpro.th2.common.schema.message.MessageRouter
-import com.google.common.collect.ImmutableMap
 import com.exactpro.th2.common.grpc.EventBatch
 import com.exactpro.th2.common.event.Event.Status.FAILED
 import com.exactpro.th2.common.event.Event.Status.PASSED
@@ -201,8 +198,7 @@ class ActHandlerKt(
         LOGGER.debug { "End place ${settings.name}" }
     }
 
-    @Throws(JsonProcessingException::class)
-    fun AbstractMessageReceiver.processResponseMessage(
+    private fun AbstractMessageReceiver.processResponseMessage(
         callName: String,
         checkpoint: Checkpoint,
         parentEventId: EventID,
