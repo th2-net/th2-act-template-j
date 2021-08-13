@@ -16,15 +16,23 @@
 
 package com.exactpro.th2.act;
 
+import static com.exactpro.th2.common.event.Event.Status.PASSED;
+import static com.exactpro.th2.common.event.Event.start;
+
+import com.exactpro.th2.common.event.Event;
+import com.exactpro.th2.common.event.IBodyData;
 import com.exactpro.th2.common.event.bean.IColumn;
 import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.common.event.bean.TreeTableEntry;
 import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.Value;
+import com.fasterxml.jackson.core.JsonProcessingException;
 
+import java.util.Map;
 import java.util.Map.Entry;
 
 public class EventUtils {
@@ -66,5 +74,31 @@ public class EventUtils {
         public MessageTableColumn(String fieldValue) {
             this.fieldValue = fieldValue;
         }
+    }
+
+    public static IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
+        CollectionBuilder passedOn = new CollectionBuilder();
+        CollectionBuilder failedOn = new CollectionBuilder();
+        expectedMessages.forEach((key, value) -> {
+            if (value.getEventStatus() == PASSED) {
+                passedOn.row(key, new CollectionBuilder().row(value.getFieldName(), new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
+            } else {
+                failedOn.row(key, new CollectionBuilder().row(value.getFieldName(), new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
+            }
+        });
+        TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
+        treeTableBuilder.row("PASSED on:", passedOn.build());
+        treeTableBuilder.row("FAILED on:", failedOn.build());
+
+        return treeTableBuilder.build();
+    }
+    public static com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {
+        Event event = start()
+                .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");
+        TreeTable parametersTable = toTreeTable(message);
+        event.status(PASSED);
+        event.bodyData(parametersTable);
+        event.type("OutgoingMessage");
+        return event.toProto(parentEventId);
     }
 }
