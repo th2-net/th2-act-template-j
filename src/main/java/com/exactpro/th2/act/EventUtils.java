@@ -29,7 +29,9 @@ import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
 import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.Value;
+import com.exactpro.th2.common.grpc.ValueOrBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Map;
@@ -38,7 +40,7 @@ import java.util.Map.Entry;
 import org.apache.commons.lang3.StringUtils;
 
 public class EventUtils {
-    public static TreeTable toTreeTable(Message message) {
+    public static TreeTable toTreeTable(MessageOrBuilder message) {
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
         for (Entry<String, Value> fieldEntry : message.getFieldsMap().entrySet()) {
             treeTableBuilder.row(fieldEntry.getKey(), toTreeTableEntry(fieldEntry.getValue()));
@@ -46,7 +48,7 @@ public class EventUtils {
         return treeTableBuilder.build();
     }
 
-    private static TreeTableEntry toTreeTableEntry(Value fieldValue) {
+    private static TreeTableEntry toTreeTableEntry(ValueOrBuilder fieldValue) {
         if (fieldValue.hasMessageValue()) {
             Message nestedMessageValue = fieldValue.getMessageValue();
             CollectionBuilder collectionBuilder = new CollectionBuilder();

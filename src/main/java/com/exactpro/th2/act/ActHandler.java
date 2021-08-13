@@ -93,21 +93,6 @@ public class ActHandler extends ActImplBase {
         return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
     }
 
-    //TODO remove connectionID from request
-    private static Message backwardCompatibilityConnectionId(PlaceMessageRequestOrBuilder request) {
-        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
-        if (!connectionId.getSessionAlias().isEmpty()) {
-            return request.getMessage();
-        }
-        return Message.newBuilder(request.getMessage())
-                .mergeMetadata(MessageMetadata.newBuilder()
-                        .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getConnectionId())
-                                .build())
-                        .build())
-                .build();
-    }
-
     private static void sendErrorResponse(StreamObserver<PlaceMessageResponse> responseObserver,
             String message) {
         responseObserver.onNext(PlaceMessageResponse.newBuilder()
@@ -136,7 +121,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "NewOrderSingle"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("ClOrdID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeOrderFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeOrderFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "ExecutionReport", CheckMetadata.passOn("ClOrdID"), //Case1: passed.
                 "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")); //Case2: failed.
@@ -190,7 +175,7 @@ public class ActHandler extends ActImplBase {
             }
 
             try {
-                sendMessage(backwardCompatibilityConnectionId(request), parentId);
+                sendMessage(request.getMessage(), parentId);
             } catch (Exception ex) {
                 eventSender.createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -215,7 +200,7 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "OrderMassCancelRequest"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("ClOrdID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeOrderMassCancelRequestFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeOrderMassCancelRequestFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")); //Case1: passed. //TODO negative
 
@@ -226,7 +211,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteCancel"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("QuoteMsgID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteCancelFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeQuoteCancelFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")); //Case1: passed. //TODO negative
 
@@ -237,7 +222,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteRequest"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("QuoteReqID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteRequestFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeQuoteRequestFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")); //Case1: passed. //TODO negative
 
@@ -248,7 +233,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteResponse"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("RFQID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteResponseFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeQuoteResponseFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "ExecutionReport", CheckMetadata.passOn("RFQID"), //Case1: passed.
                 "QuoteStatusReport", CheckMetadata.passOn("RFQID")); //Case2: passed. //TODO negative
@@ -260,7 +245,7 @@ public class ActHandler extends ActImplBase {
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "Quote"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("RFQID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteFIX"; //Set name prefix for act root event. Ignored is description is too long.
+        String actName = "placeQuoteFIX"; //Set name prefix for act root event. 
         ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
                 "QuoteAck", CheckMetadata.passOn("RFQID")); //Case1: passed. //TODO negative
 
@@ -285,7 +270,7 @@ public class ActHandler extends ActImplBase {
             NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis(); //Get start time
-        Message message = backwardCompatibilityConnectionId(request); //Copy ConnectionID from request to message metadata if empty.
+        Message message = request.getMessage();
         checkRequestMessageType(expectedRequestType, message.getMetadata()); //Check if request message type is coresponds to method.
         ConnectionID requestConnId = message.getMetadata().getId().getConnectionId(); //Get ConnectionID.
 
