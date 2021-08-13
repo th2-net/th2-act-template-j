@@ -20,38 +20,44 @@ import com.exactpro.th2.act.rules.AbstractSingleConnectionRule
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageOrBuilder
+import com.exactpro.th2.common.message.messageType
 import com.google.protobuf.TextFormat
 import mu.KotlinLogging
 import org.apache.commons.lang3.StringUtils
 
-class FieldCheckRuleKt(private val expectedFieldValue: String, private val msgTypeToFieldName: Map<String, String>, requestConnId: ConnectionID) : AbstractSingleConnectionRule(requestConnId) {
-
-    companion object {
-        private val LOGGER = KotlinLogging.logger {}
-    }
+class FieldCheckRuleKt(
+    private val expectedFieldValue: String,
+    private val msgTypeToFieldName: Map<String, String>,
+    requestConnId: ConnectionID
+) : AbstractSingleConnectionRule(requestConnId) {
 
     init {
-        msgTypeToFieldName.forEach { (msgType: String, fieldName: String) ->
-            require(!StringUtils.isAnyBlank(msgType, fieldName)) { "'msgTypeToFieldName' mapping must not contain blank values. MsgType: '$msgType' FieldName: '$fieldName'" }
+        msgTypeToFieldName.forEach { (msgType, fieldName) ->
+            require(
+                !StringUtils.isAnyBlank(
+                    msgType,
+                    fieldName
+                )
+            ) { "'msgTypeToFieldName' mapping must not contain blank values. MsgType: '$msgType' FieldName: '$fieldName'" }
         }
     }
 
     override fun checkMessageFromConnection(message: Message): Boolean {
-        val messageType = message.metadata.messageType
-        val fieldName = msgTypeToFieldName[messageType]
-        if (fieldName != null) {
-            LOGGER.debug { "Checking the message: ${TextFormat.shortDebugString(message)}" }
-            if (checkExpectedField(message, fieldName)) {
+        val messageType = message.messageType
+        val fieldName = msgTypeToFieldName[messageType] ?: return false
+        LOGGER.debug { "Checking the message: ${TextFormat.shortDebugString(message)}" }
+        return checkExpectedField(message, fieldName).also { match ->
+            if (match) {
                 LOGGER.debug { "FixCheckRule passed on $messageType messageType" }
-                return true
             }
         }
-        return false
     }
 
     private fun checkExpectedField(message: MessageOrBuilder, fieldName: String): Boolean {
-        val value = message.fieldsMap[fieldName]
-        return value != null && expectedFieldValue == value.simpleValue
+        return message.fieldsMap[fieldName]?.simpleValue == expectedFieldValue
     }
 
+    companion object {
+        private val LOGGER = KotlinLogging.logger {}
+    }
 }

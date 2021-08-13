@@ -191,7 +191,7 @@ class ActHandlerKt(
                 throw it
             }
 
-        }.onFailure { it ->
+        }.onFailure {
             LOGGER.error(it) { "Failed to place ${settings.name}" }
             responseObserver.sendErrorResponse("Failed to place ${settings.name}, error: ${it.message}")
         }

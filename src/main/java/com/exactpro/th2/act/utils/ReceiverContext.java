@@ -43,11 +43,13 @@ public class ReceiverContext {
         return parentId;
     }
 
-    @FunctionalInterface public interface ReceiverSupplier {
+    @FunctionalInterface
+    public interface ReceiverSupplier {
         AbstractMessageReceiver create(ResponseMonitor monitor, ReceiverContext context);
     }
 
-    @FunctionalInterface public interface NoResponseBodySupplier {
+    @FunctionalInterface
+    public interface NoResponseBodySupplier {
         Collection<IBodyData> createNoResponseBody();
     }
 }
