@@ -35,6 +35,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.commons.lang3.StringUtils;
+
 public class EventUtils {
     public static TreeTable toTreeTable(Message message) {
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
@@ -79,11 +81,13 @@ public class EventUtils {
     public static IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
         CollectionBuilder passedOn = new CollectionBuilder();
         CollectionBuilder failedOn = new CollectionBuilder();
-        expectedMessages.forEach((key, value) -> {
-            if (value.getEventStatus() == PASSED) {
-                passedOn.row(key, new CollectionBuilder().row(value.getFieldName(), new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
+        expectedMessages.forEach((msgType, checkMD) -> {
+            TreeTableEntry rowValue = new CollectionBuilder().row(StringUtils.join(checkMD.getFieldPath(), "/"),
+                    new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build();
+            if (checkMD.getEventStatus() == PASSED) {
+                passedOn.row(msgType, rowValue);
             } else {
-                failedOn.row(key, new CollectionBuilder().row(value.getFieldName(), new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
+                failedOn.row(msgType, rowValue);
             }
         });
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
@@ -92,6 +96,7 @@ public class EventUtils {
 
         return treeTableBuilder.build();
     }
+
     public static com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {
         Event event = start()
                 .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");

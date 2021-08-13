@@ -58,6 +58,7 @@ import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.MessageMetadataOrBuilder;
 import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -154,9 +155,7 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, requestMessageType, expectedResponses, actName,
                     () -> Collections.singletonList(EventUtils.createNoResponseBody(expectedResponses, matchingValue.getSimpleValue())),
                     (monitor, context) -> {
-                        Map<String, String> msgTypeToFieldName = expectedResponses.entrySet().stream()
-                                .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
-                        CheckRule checkRule = new FieldCheckRule(matchingValue.getSimpleValue(), msgTypeToFieldName, context.getConnectionID());
+                        CheckRule checkRule = new FieldCheckRule(matchingValue.getSimpleValue(), expectedResponses, context.getConnectionID());
                         return new MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST);
                     });
 
@@ -268,7 +267,7 @@ public class ActHandler extends ActImplBase {
         placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
     }
 
-    private void checkRequestMessageType(String expectedMessageType, MessageMetadata metadata) {
+    private void checkRequestMessageType(String expectedMessageType, MessageMetadataOrBuilder metadata) {
         if (!expectedMessageType.equals(metadata.getMessageType())) {
             throw new IllegalArgumentException(format("Unsupported request message type '%s', expected '%s'",
                     metadata.getMessageType(), expectedMessageType));

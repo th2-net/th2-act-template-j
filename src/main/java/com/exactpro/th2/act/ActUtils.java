@@ -10,7 +10,7 @@ import com.exactpro.th2.common.grpc.Value;
 
 public class ActUtils {
 
-    static Value getMatchingValue(MessageOrBuilder message, List<String> path) throws FieldNotFoundException {
+    public static Value getMatchingValue(MessageOrBuilder message, List<String> path) throws FieldNotFoundException {
         String curField = path.get(0);
         Value value = message.getFieldsMap().get(curField);
         if (value == null) {

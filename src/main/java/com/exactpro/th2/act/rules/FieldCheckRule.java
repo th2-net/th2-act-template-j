@@ -16,14 +16,21 @@
 package com.exactpro.th2.act.rules;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.isEmpty;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.th2.act.CheckMetadata;
+import com.exactpro.th2.act.ActUtils;
+import com.exactpro.th2.act.FieldNotFoundException;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
@@ -32,41 +39,56 @@ import com.exactpro.th2.common.grpc.Value;
 public class FieldCheckRule extends AbstractSingleConnectionRule {
     private static final Logger LOGGER = LoggerFactory.getLogger(FieldCheckRule.class);
     private final String expectedFieldValue;
-    private final Map<String, String> msgTypeToFieldName;
+    private final Map<String, CheckMetadata> expectedMessages;
 
-    public FieldCheckRule(String expectedFieldValue, Map<String, String> msgTypeToFieldName, ConnectionID requestConnId) {
+    public FieldCheckRule(String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, ConnectionID requestConnId) {
         super(requestConnId);
         this.expectedFieldValue = expectedFieldValue;
+        checkIfAnyBlank(expectedMessages);
+        this.expectedMessages = expectedMessages;
+    }
 
-        msgTypeToFieldName.forEach((msgType, fieldName) -> {
-            if (StringUtils.isAnyBlank(msgType, fieldName)) {
-                throw new IllegalArgumentException("'msgTypeToFieldName' mapping must not contain blank values. "
-                        + "MsgType: '" + msgType + "'"
-                        + "FieldName: '" + fieldName + "'"
+    /**
+     * @param expectedMessages Map msgType to CheckMetadata(fieldPath)
+     * @throws IllegalArgumentException if any msgType or fieldPath is blank
+     */
+    private void checkIfAnyBlank(Map<String, CheckMetadata> expectedMessages) {
+        expectedMessages.forEach((msgType, value) -> {
+            String[] fieldPath = value.getFieldPath();
+            if (isEmpty(msgType) || ArrayUtils.isEmpty(fieldPath)) {
+                throw new IllegalArgumentException(format(
+                        "'msgTypeToFieldName' mapping must not contain blank values. MsgType: '%s', FieldPath: '%s'",
+                        msgType, Arrays.toString(fieldPath))
                 );
             }
         });
-        this.msgTypeToFieldName = msgTypeToFieldName;
     }
 
     @Override
     protected boolean checkMessageFromConnection(Message message) {
         String messageType = message.getMetadata().getMessageType();
-        String fieldName = msgTypeToFieldName.get(messageType);
-        if (fieldName != null) {
+        CheckMetadata checkMetadata = expectedMessages.get(messageType);
+        if (checkMetadata != null) {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Checking the message: {}", shortDebugString(message));
             }
-            if (checkExpectedField(message, fieldName)) {
-                LOGGER.debug("FixCheckRule passed on {} messageType", messageType);
+            if (checkExpectedField(message, checkMetadata)) {
+                LOGGER.debug("FieldCheckRule passed on {} messageType", messageType);
                 return true;
             }
         }
         return false;
     }
 
-    private boolean checkExpectedField(MessageOrBuilder message, String fieldName) {
-        Value value = message.getFieldsMap().get(fieldName);
+    private boolean checkExpectedField(MessageOrBuilder message, CheckMetadata checkMetadata) {
+        Value value;
+        List<String> fieldPath = Arrays.asList(checkMetadata.getFieldPath());
+        try {
+            value = ActUtils.getMatchingValue(message, fieldPath);
+        } catch (FieldNotFoundException e) {
+            LOGGER.error("Failed to find matching field path: " + fieldPath, e);
+            value = null;
+        }
         return value != null
                 && Objects.equals(expectedFieldValue, value.getSimpleValue());
     }

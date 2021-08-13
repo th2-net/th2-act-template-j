@@ -12,11 +12,11 @@ import com.exactpro.th2.common.grpc.RequestStatus;
 public class CheckMetadata {
     private final Status eventStatus;
     private final RequestStatus.Status requestStatus;
-    private final String fieldName;
+    private final String[] fieldPath;
 
-    private CheckMetadata(String fieldName, Status eventStatus) {
+    private CheckMetadata(Status eventStatus, String... fieldPath) {
         this.eventStatus = requireNonNull(eventStatus, "Event status can't be null");
-        this.fieldName = requireNonNull(fieldName, "Field name can't be null");
+        this.fieldPath = requireNonNull(fieldPath, "Field path can't be null");
 
         switch (eventStatus) {
         case PASSED:
@@ -30,12 +30,12 @@ public class CheckMetadata {
         }
     }
 
-    public static CheckMetadata passOn(String fieldName) {
-        return new CheckMetadata(fieldName, PASSED);
+    public static CheckMetadata passOn(String... fieldName) {
+        return new CheckMetadata(PASSED, fieldName);
     }
 
-    public static CheckMetadata failOn(String fieldName) {
-        return new CheckMetadata(fieldName, FAILED);
+    public static CheckMetadata failOn(String... fieldName) {
+        return new CheckMetadata(FAILED, fieldName);
     }
 
     public Status getEventStatus() {
@@ -46,7 +46,7 @@ public class CheckMetadata {
         return requestStatus;
     }
 
-    public String getFieldName() {
-        return fieldName;
+    public String[] getFieldPath() {
+        return fieldPath;
     }
 }
