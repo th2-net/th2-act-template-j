@@ -341,8 +341,6 @@ class ActHandlerKt(
             send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event")
         }.onFailure {
             LOGGER.error(it) { "Could not store event" }
-        }.onSuccess {
-            LOGGER.debug { "Event stored: ${JsonFormat.printer().omittingInsignificantWhitespace().print(eventRequest)}" }
         }
     }
 
