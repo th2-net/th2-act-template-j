@@ -24,7 +24,6 @@ import static java.lang.String.format;
 import static java.time.Instant.ofEpochMilli;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.stream.Collectors.toUnmodifiableMap;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -32,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -145,10 +143,10 @@ public class ActHandler extends ActImplBase {
                     });
 
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error(format("Failed to place %s. Message = {}", requestMessageType), request.getMessage(), e);
+            LOGGER.error(format("Failed to place %s. Message = %s", requestMessageType, request.getMessage()), e);
             sendErrorResponse(responseObserver, format("Failed to place %s. Error: %s", requestMessageType, e.getMessage()));
         } catch (FieldNotFoundException e) {
-            LOGGER.error("Failed to find matching field: ", request, e);
+            LOGGER.error("Failed to find matching field: " + request, e);
             sendErrorResponse(responseObserver, format("Failed to place %s. There is no path %s in request message. Error: %s", request.getMessage().getMetadata().getMessageType(), matchingFieldPath, e.getMessage()));
         } finally {
             LOGGER.debug(format("%s has finished.", actName));
@@ -189,7 +187,7 @@ public class ActHandler extends ActImplBase {
             responseObserver.onCompleted();
 
         } catch (RuntimeException | IOException e) {
-            LOGGER.error("Failed to send a message. Message = {}", request.getMessage(), e);
+            LOGGER.error("Failed to send a message. Message = {}" + request.getMessage(), e);
             sendMessageErrorResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
@@ -265,7 +263,7 @@ public class ActHandler extends ActImplBase {
      * @param noResponseBodySupplier supplier for {@link IBodyData} that will be added to the event in case there is not response received
      * @param receiver supplier for the {@link AbstractMessageReceiver} that will await for the required message
      */
-    private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
+    private void placeMessage(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver,
             String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
             NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
