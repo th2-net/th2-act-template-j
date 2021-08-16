@@ -68,6 +68,12 @@ public class MessageReceiver extends AbstractMessageReceiver {
         return checkRule.processedIDs();
     }
 
+    @org.jetbrains.annotations.Nullable
+    @Override
+    public State getState() {
+        return null;
+    }
+
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {
         try {
             LOGGER.debug("Message received batch, size {}", batch.getSerializedSize());

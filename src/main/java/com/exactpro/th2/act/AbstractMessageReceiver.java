@@ -42,4 +42,11 @@ public abstract class AbstractMessageReceiver implements AutoCloseable {
     protected void signalAboutReceived() {
         monitor.responseReceived();
     }
+    public enum State {
+        START, OUTGOING_MATCHED, INCOMING_MATCHED
+    }
+    @Nullable
+    public abstract State getState();
+
+
 }

@@ -24,7 +24,7 @@ import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.util.JsonFormat;
 
 public class EventSender {
-    //TODO
+    //TODO more wildcards
     private static final String DESCRIPTIONONLY_WILDCARD = "!exact:";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
@@ -68,8 +68,8 @@ public class EventSender {
 
         Event errorEvent = Event.from(start)
                 .endTimestamp()
-                .name(format("Internal %s error", actName))
-                .type("No response found by target keys.")
+                .name("No response found by target keys.")
+                .type(format("%s error", actName))
                 .status(FAILED);
         for (IBodyData data : noResponseBodySupplier.createNoResponseBody()) {
             errorEvent.bodyData(data);
@@ -84,7 +84,17 @@ public class EventSender {
         Event errorEvent = Event.from(start)
                 .endTimestamp()
                 .name(format("Internal %s error", actName))
-                .type("Error")
+                .type(format("%s error", actName))
+                .status(FAILED)
+                .bodyData(new MessageBuilder().text(message).build());
+        storeEvent(errorEvent.toProto(parentEventId));
+    }
+
+    public void createAndStoreSendingFailedEvent(String actName, String message, Instant start, EventID parentEventId) throws JsonProcessingException {
+        Event errorEvent = Event.from(start)
+                .endTimestamp()
+                .name("Unable to send the message.")
+                .type(format("%s error", actName))
                 .status(FAILED)
                 .bodyData(new MessageBuilder().text(message).build());
         storeEvent(errorEvent.toProto(parentEventId));

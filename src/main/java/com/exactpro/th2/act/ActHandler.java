@@ -32,8 +32,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.exactpro.th2.act.AbstractMessageReceiver.State;
 
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
@@ -41,6 +44,7 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
+import com.exactpro.th2.act.rules.EventIDCheckRule;
 import com.exactpro.th2.act.rules.FieldCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
@@ -126,7 +130,7 @@ public class ActHandler extends ActImplBase {
         placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
     }
 
-    private void placeTemplate(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver, String requestMessageType, List<String> matchingFieldPath, String actName,
+    private void placeTemplate(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver, String requestMessageType, List<String> matchingFieldPath, String actName,
             ImmutableMap<String, CheckMetadata> expectedResponses) {
         try {
             if (LOGGER.isDebugEnabled()) {
@@ -138,8 +142,9 @@ public class ActHandler extends ActImplBase {
             placeMessage(request, responseObserver, requestMessageType, expectedResponses, actName,
                     () -> Collections.singletonList(EventUtils.createNoResponseBody(expectedResponses, matchingValue.getSimpleValue())),
                     (monitor, context) -> {
-                        CheckRule checkRule = new FieldCheckRule(matchingValue.getSimpleValue(), expectedResponses, context.getConnectionID());
-                        return new MessageReceiver(subscriptionManager, monitor, checkRule, Direction.FIRST);
+                        CheckRule echoCheckRule = new EventIDCheckRule(context.getParentId().getId(), context.getConnectionID(), Direction.SECOND);
+                        CheckRule responseCheckRule = new FieldCheckRule(matchingValue.getSimpleValue(), expectedResponses, context.getConnectionID());
+                        return new EchoCheckMessageReceiver(subscriptionManager, monitor, echoCheckRule, responseCheckRule);
                     });
 
         } catch (RuntimeException | JsonProcessingException e) {
@@ -293,6 +298,7 @@ public class ActHandler extends ActImplBase {
                             checkpoint,
                             parentId,
                             messageReceiver.getResponseMessage(),
+                            messageReceiver.getState(),
                             expectedMessages,
                             timeout, messageReceiver.processedMessageIDs(), noResponseBodySupplier);
                 }
@@ -313,13 +319,24 @@ public class ActHandler extends ActImplBase {
             StreamObserver<PlaceMessageResponse> responseObserver,
             Checkpoint checkpoint,
             EventID parentEventId,
-            Message responseMessage,
+            @Nullable Message responseMessage,
+            @Nullable State state,
             Map<String, CheckMetadata> expectedMessages,
             long timeout,
             Iterable<MessageID> messageIDList,
             NoResponseBodySupplier noResponseBodySupplier) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
-        if (responseMessage == null) {
+        if (responseMessage == null && state == State.START) {
+            String message = "Unable to send the message to an external recipient. \n "
+                    + "Possible solutions: \n "
+                    + "1) Check that conn SECOND direction is connected to act.\n "
+                    + "2) Check codec logs or service events(Encoding by dictionary problem.)\n "
+                    + "3) Check conn logs or service events(Connection problem.)";
+            eventSender.createAndStoreSendingFailedEvent(actName, message,
+                    Instant.now(),
+                    parentEventId);
+            sendErrorResponse(responseObserver, message);}
+        else if (responseMessage == null) {
             eventSender.createAndStoreNoResponseEvent(actName, noResponseBodySupplier,
                     Instant.now(),
                     parentEventId, messageIDList);
