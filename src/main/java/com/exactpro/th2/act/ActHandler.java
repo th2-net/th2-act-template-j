@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.exactpro.th2.act;
 
+import static com.exactpro.th2.common.event.Event.Status.FAILED;
 import static com.exactpro.th2.common.event.Event.Status.PASSED;
 import static com.exactpro.th2.common.event.Event.start;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
@@ -32,12 +33,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.jetbrains.annotations.Nullable;
+import javax.annotation.Nullable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.act.AbstractMessageReceiver.State;
-
+import com.exactpro.th2.act.ResponseMapper.FieldPath;
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
+import com.exactpro.th2.act.ResponseMapper.ValueMatcher;
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
@@ -45,7 +49,7 @@ import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
 import com.exactpro.th2.act.rules.EventIDCheckRule;
-import com.exactpro.th2.act.rules.FieldCheckRule;
+import com.exactpro.th2.act.rules.FieldsCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
@@ -62,10 +66,8 @@ import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageMetadata;
 import com.exactpro.th2.common.grpc.MessageMetadataOrBuilder;
 import com.exactpro.th2.common.grpc.RequestStatus;
-import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.google.common.collect.ImmutableMap;
 
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -123,36 +125,47 @@ public class ActHandler extends ActImplBase {
     public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "NewOrderSingle"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("ClOrdID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeOrderFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "ExecutionReport", CheckMetadata.passOn("ClOrdID"), //Case1: passed.
-                "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")); //Case2: failed.
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+        String actName = "placeOrderFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
+
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.FAILED, "ExecutionReport", Map.of(
+                            new FieldPath("ClOrdID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("ExecType"), ValueMatcher.in("8", "C", "7", "9", "4", "6"))
+                    ),
+                    new ResponseMapper(ResponseStatus.PASSED, "ExecutionReport", Map.of(
+                            new FieldPath("ClOrdID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("ExecType"), ValueMatcher.in("0", "F", "A"))
+                    ),
+                    new ResponseMapper(ResponseStatus.FAILED, "BusinessMessageReject", Map.of(
+                            new FieldPath("BusinessRejectRefID"), ValueMatcher.equal(matchingValue))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
     }
 
-    private void placeTemplate(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver, String requestMessageType, List<String> matchingFieldPath, String actName,
-            ImmutableMap<String, CheckMetadata> expectedResponses) {
+    private void placeTemplate(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver, String requestMessageType, String actName,
+            List<ResponseMapper> responseMapping) {
         try {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug(format("%s request: %s", actName, shortDebugString(request)));
             }
-            Message requestMessage = request.getMessage();
-            Value matchingValue = ActUtils.getMatchingValue(requestMessage, matchingFieldPath);
 
-            placeMessage(request, responseObserver, requestMessageType, expectedResponses, actName,
-                    () -> Collections.singletonList(EventUtils.createNoResponseBody(expectedResponses, matchingValue.getSimpleValue())),
+            placeMessage(request, responseObserver, requestMessageType, actName,
+                    () -> Collections.singletonList(EventUtils.createNoResponseBody(responseMapping)),
                     (monitor, context) -> {
                         CheckRule echoCheckRule = new EventIDCheckRule(context.getParentId().getId(), context.getConnectionID(), Direction.SECOND);
-                        CheckRule responseCheckRule = new FieldCheckRule(matchingValue.getSimpleValue(), expectedResponses, context.getConnectionID());
+                        CheckRule responseCheckRule = new FieldsCheckRule(responseMapping, context.getConnectionID());
                         return new EchoCheckMessageReceiver(subscriptionManager, monitor, echoCheckRule, responseCheckRule);
                     });
 
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error(format("Failed to place %s. Message = %s", requestMessageType, request.getMessage()), e);
             sendErrorResponse(responseObserver, format("Failed to place %s. Error: %s", requestMessageType, e.getMessage()));
-        } catch (FieldNotFoundException e) {
-            LOGGER.error("Failed to find matching field: " + request, e);
-            sendErrorResponse(responseObserver, format("Failed to place %s. There is no path %s in request message. Error: %s", request.getMessage().getMetadata().getMessageType(), matchingFieldPath, e.getMessage()));
         } finally {
             LOGGER.debug(format("%s has finished.", actName));
         }
@@ -203,56 +216,126 @@ public class ActHandler extends ActImplBase {
     public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "OrderMassCancelRequest"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("ClOrdID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeOrderMassCancelRequestFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")); //Case1: passed. //TODO negative
+        String actName = "placeOrderMassCancelRequestFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
 
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.PASSED, "OrderMassCancelReport", Map.of(
+                            new FieldPath("ClOrdID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("MassCancelResponse"), ValueMatcher.equal("7"))
+                    ),
+                    new ResponseMapper(ResponseStatus.FAILED, "OrderMassCancelReport", Map.of(
+                            new FieldPath("ClOrdID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("MassCancelResponse"), ValueMatcher.equal("0"))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
     }
 
     @Override
     public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteCancel"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("QuoteMsgID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteCancelFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")); //Case1: passed. //TODO negative
+        String actName = "placeQuoteCancelFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
 
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.PASSED, "MassQuoteAcknowledgement", Map.of(
+                            new FieldPath("QuoteID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("QuoteStatus"), ValueMatcher.equal("4"))
+                    ),
+                    new ResponseMapper(ResponseStatus.FAILED, "MassQuoteAcknowledgement", Map.of(
+                            new FieldPath("QuoteID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("QuoteStatus"), ValueMatcher.equal("5"))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
     }
 
     @Override
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteRequest"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("QuoteReqID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteRequestFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")); //Case1: passed. //TODO negative
+        String actName = "placeQuoteRequestFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
 
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.FAILED, "QuoteStatusReport", Map.of(
+                            new FieldPath("QuoteReqID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("QuoteStatus"), ValueMatcher.equal("5"))
+                    ),
+                    new ResponseMapper(ResponseStatus.PASSED, "QuoteStatusReport", Map.of(
+                            new FieldPath("QuoteReqID"), ValueMatcher.equal(matchingValue))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
     }
 
     @Override
     public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "QuoteResponse"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("RFQID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteResponseFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "ExecutionReport", CheckMetadata.passOn("RFQID"), //Case1: passed.
-                "QuoteStatusReport", CheckMetadata.passOn("RFQID")); //Case2: passed. //TODO negative
+        String actName = "placeQuoteResponseFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
 
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.FAILED, "QuoteStatusReport", Map.of(
+                            new FieldPath("RFQID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("QuoteStatus"), ValueMatcher.equal("5"))
+                    ),
+                    new ResponseMapper(ResponseStatus.PASSED, "QuoteStatusReport", Map.of(
+                            new FieldPath("RFQID"), ValueMatcher.equal(matchingValue))
+                    ),
+                    new ResponseMapper(ResponseStatus.PASSED, "ExecutionReport", Map.of(
+                            new FieldPath("RFQID"), ValueMatcher.equal(matchingValue))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
     }
 
     @Override
     public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
         String requestMessageType = "Quote"; //Set message type can be placed by this method.
         List<String> matchingFieldPath = Arrays.asList("RFQID"); //Describe path to field. Number of element in list also should be described.
-        String actName = "placeQuoteFIX"; //Set name prefix for act root event. 
-        ImmutableMap<String, CheckMetadata> expectedResponses = ImmutableMap.of(
-                "QuoteAck", CheckMetadata.passOn("RFQID")); //Case1: passed. //TODO negative
+        String actName = "placeQuoteFIX"; //Set name prefix for act root event.
+        try {
+            String matchingValue = ActUtils.getMatchingValue(request.getMessage(), matchingFieldPath).getSimpleValue();
 
-        placeTemplate(request, responseObserver, requestMessageType, matchingFieldPath, actName, expectedResponses);
+            List<ResponseMapper> responseMapping = Arrays.asList(
+                    new ResponseMapper(ResponseStatus.FAILED, "QuoteStatusReport", Map.of(
+                            new FieldPath("RFQID"), ValueMatcher.equal(matchingValue),
+                            new FieldPath("QuoteStatus"), ValueMatcher.equal("5"))
+                    ),
+                    new ResponseMapper(ResponseStatus.PASSED, "QuoteAck", Map.of(
+                            new FieldPath("RFQID"), ValueMatcher.equal(matchingValue))
+                    ));
+
+            placeTemplate(request, responseObserver, requestMessageType, actName, responseMapping);
+        } catch (FieldNotFoundException e) {
+            reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
+        }
+    }
+
+    private void reportFieldNotFound(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver, List<String> matchingFieldPath, String actName, FieldNotFoundException e) {
+        LOGGER.error("Failed to find matching field: " + request, e);
+        sendErrorResponse(responseObserver, format("Failed to place %s. There is no path %s in request message. Error: %s", request.getMessage().getMetadata().getMessageType(), matchingFieldPath, e.getMessage()));
+        LOGGER.debug(format("%s has finished.", actName));
     }
 
     private void checkRequestMessageType(String expectedMessageType, MessageMetadataOrBuilder metadata) {
@@ -264,12 +347,11 @@ public class ActHandler extends ActImplBase {
 
     /**
      *
-     * @param expectedMessages mapping between response and the event status that should be applied in that case
      * @param noResponseBodySupplier supplier for {@link IBodyData} that will be added to the event in case there is not response received
      * @param receiver supplier for the {@link AbstractMessageReceiver} that will await for the required message
      */
     private void placeMessage(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver,
-            String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
+            String expectedRequestType, String actName,
             NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis(); //Get start time
@@ -299,7 +381,7 @@ public class ActHandler extends ActImplBase {
                             parentId,
                             messageReceiver.getResponseMessage(),
                             messageReceiver.getState(),
-                            expectedMessages,
+                            messageReceiver.getResponseStatus(),
                             timeout, messageReceiver.processedMessageIDs(), noResponseBodySupplier);
                 }
             }
@@ -321,7 +403,7 @@ public class ActHandler extends ActImplBase {
             EventID parentEventId,
             @Nullable Message responseMessage,
             @Nullable State state,
-            Map<String, CheckMetadata> expectedMessages,
+            @Nullable ResponseStatus responseStatus,
             long timeout,
             Iterable<MessageID> messageIDList,
             NoResponseBodySupplier noResponseBodySupplier) throws JsonProcessingException {
@@ -330,13 +412,14 @@ public class ActHandler extends ActImplBase {
             String message = "Unable to send the message to an external recipient. \n "
                     + "Possible solutions: \n "
                     + "1) Check that conn SECOND direction is connected to act.\n "
-                    + "2) Check codec logs or service events(Encoding by dictionary problem.)\n "
-                    + "3) Check conn logs or service events(Connection problem.)";
+                    + "2) Check codec logs or service events(Encoding by dictionary problem).\n "
+                    + "3) Check conn logs or service events(Connection problem).\n "
+                    + "4) Incorrect session-alias(Check that session-alias exist and filtering is correct).";
             eventSender.createAndStoreSendingFailedEvent(actName, message,
                     Instant.now(),
                     parentEventId);
-            sendErrorResponse(responseObserver, message);}
-        else if (responseMessage == null) {
+            sendErrorResponse(responseObserver, message);
+        } else if (responseMessage == null) {
             eventSender.createAndStoreNoResponseEvent(actName, noResponseBodySupplier,
                     Instant.now(),
                     parentEventId, messageIDList);
@@ -345,19 +428,19 @@ public class ActHandler extends ActImplBase {
         } else {
             MessageMetadata metadata = responseMessage.getMetadata();
             String messageType = metadata.getMessageType();
-            CheckMetadata checkMetadata = expectedMessages.get(messageType);
+
             TreeTable parametersTable = EventUtils.toTreeTable(responseMessage);
             eventSender.storeEvent(start()
                     .name(format("Received '%s' response message", messageType))
                     .type("ResponseMessage")
-                    .status(checkMetadata.getEventStatus())
+                    .status(responseStatus == ResponseStatus.PASSED ? PASSED : FAILED)
                     .bodyData(parametersTable)
                     .messageID(metadata.getId())
                     .toProto(parentEventId)
             );
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage)
-                    .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
+                    .setStatus(RequestStatus.newBuilder().setStatus(responseStatus == ResponseStatus.PASSED ? SUCCESS : ERROR).build())
                     .setCheckpointId(checkpoint)
                     .build();
             responseObserver.onNext(response);

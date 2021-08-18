@@ -29,6 +29,7 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
@@ -162,9 +163,15 @@ public class EchoCheckMessageReceiver extends AbstractMessageReceiver {
         state = State.INCOMING_MATCHED;
         signalAboutReceived();
     }
-    public State getState(){
+
+    public State getState() {
         return state;
     }
 
+    @Nullable
+    @Override
+    public ResponseStatus getResponseStatus() {
+        return incomingRule.getResponseStatus();
+    }
 
 }

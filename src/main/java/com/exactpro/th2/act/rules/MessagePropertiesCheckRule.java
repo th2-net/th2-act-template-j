@@ -20,6 +20,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 
+import javax.annotation.Nullable;
+
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Message;
 
@@ -45,5 +48,15 @@ public class MessagePropertiesCheckRule extends AbstractSingleConnectionRule {
             }
         }
         return true;
+    }
+
+    /**
+     * Matched responseStatus
+     * @return the matched responseStatus or {@code null}
+     */
+    @Nullable
+    @Override
+    public ResponseStatus getResponseStatus() {
+        return null;
     }
 }

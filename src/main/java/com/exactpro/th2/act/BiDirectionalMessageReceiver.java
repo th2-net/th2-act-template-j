@@ -32,6 +32,7 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
@@ -47,11 +48,10 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     private final Function<Message, CheckRule> incomingRuleSupplier;
 
     private final Queue<MessageBatch> incomingBuffer = new LinkedList<>();
+    private final AtomicReference<CheckRule> incomingRule = new AtomicReference<>();
+    private volatile State state = State.START;
     private final MessageListener<MessageBatch> incomingListener = this::processIncomingMessages;
     private final MessageListener<MessageBatch> outgoingListener = this::processOutgoingMessages;
-    private final AtomicReference<CheckRule> incomingRule = new AtomicReference<>();
-
-    private volatile State state = State.START;
 
     public BiDirectionalMessageReceiver(
             SubscriptionManager subscriptionManager,
@@ -87,9 +87,15 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         return messageIDS;
     }
 
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     @Override
-    public AbstractMessageReceiver.State getState() {
+    public State getState() {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public ResponseStatus getResponseStatus() {
         return null;
     }
 

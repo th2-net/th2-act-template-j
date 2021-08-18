@@ -15,6 +15,7 @@
  */
 package com.exactpro.th2.act
 
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl
 import com.exactpro.th2.act.rules.AbstractSingleConnectionRule
 import com.exactpro.th2.common.grpc.ConnectionID
@@ -23,9 +24,7 @@ import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.message.message
 import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.same
 import com.nhaarman.mockitokotlin2.verify
-import com.nhaarman.mockitokotlin2.whenever
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.assertions.containsExactlyInAnyOrder
@@ -117,6 +116,14 @@ class TestBiDirectionalMessageReceiver {
             private val message: Message,
             connectionId: ConnectionID
     ) : AbstractSingleConnectionRule(connectionId) {
+        /**
+         * Matched responseStatus
+         * @return the matched responseStatus or `null`
+         */
+        override fun getResponseStatus(): ResponseStatus? {
+            TODO("Not yet implemented")
+        }
+
         override fun checkMessageFromConnection(message: Message): Boolean = this.message === message
     }
 }

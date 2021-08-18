@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,11 @@ package com.exactpro.th2.act;
 import static com.exactpro.th2.common.event.Event.Status.PASSED;
 import static com.exactpro.th2.common.event.Event.start;
 
+import java.util.Map.Entry;
+
+import org.apache.commons.lang3.StringUtils;
+
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.IBodyData;
 import com.exactpro.th2.common.event.bean.IColumn;
@@ -33,11 +38,6 @@ import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.grpc.ValueOrBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
-
-import java.util.Map;
-import java.util.Map.Entry;
-
-import org.apache.commons.lang3.StringUtils;
 
 public class EventUtils {
     public static TreeTable toTreeTable(MessageOrBuilder message) {
@@ -72,24 +72,20 @@ public class EventUtils {
                 .build();
     }
 
-    static class MessageTableColumn implements IColumn {
-        public final String fieldValue;
-
-        public MessageTableColumn(String fieldValue) {
-            this.fieldValue = fieldValue;
-        }
-    }
-
-    public static IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
+    public static IBodyData createNoResponseBody(Iterable<ResponseMapper> responseMapping) {
         CollectionBuilder passedOn = new CollectionBuilder();
         CollectionBuilder failedOn = new CollectionBuilder();
-        expectedMessages.forEach((msgType, checkMD) -> {
-            TreeTableEntry rowValue = new CollectionBuilder().row(StringUtils.join(checkMD.getFieldPath(), "/"),
-                    new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build();
-            if (checkMD.getEventStatus() == PASSED) {
-                passedOn.row(msgType, rowValue);
+        responseMapping.forEach(responseMapper -> {
+            CollectionBuilder responseMapperDescription = new CollectionBuilder();
+            responseMapper.getMatchingFields().forEach((path, valueMatcher) -> {
+                responseMapperDescription.row(StringUtils.join(path.getPath(), "/"),
+                        new RowBuilder().column(new MessageTableColumn(valueMatcher.getMatcherDescription())).build());
+
+            });
+            if (responseMapper.getStatus() == ResponseStatus.PASSED) {
+                passedOn.row(responseMapper.getResponseType(), responseMapperDescription.build());
             } else {
-                failedOn.row(msgType, rowValue);
+                failedOn.row(responseMapper.getResponseType(), responseMapperDescription.build());
             }
         });
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
@@ -107,5 +103,13 @@ public class EventUtils {
         event.bodyData(parametersTable);
         event.type("OutgoingMessage");
         return event.toProto(parentEventId);
+    }
+
+    static class MessageTableColumn implements IColumn {
+        public final String fieldValue;
+
+        public MessageTableColumn(String fieldValue) {
+            this.fieldValue = fieldValue;
+        }
     }
 }
