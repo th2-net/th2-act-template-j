@@ -17,10 +17,13 @@
 package com.exactpro.th2.act;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.lang.String.format;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 
@@ -29,12 +32,15 @@ import javax.annotation.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.th2.act.ResponseMapper.FieldPath;
 import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
+import com.exactpro.th2.act.ResponseMapper.ValueMatcher;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.MessageBatchOrBuilder;
 import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.schema.message.MessageListener;
 
 public class EchoCheckMessageReceiver extends AbstractMessageReceiver {
@@ -121,8 +127,19 @@ public class EchoCheckMessageReceiver extends AbstractMessageReceiver {
                 LOGGER.debug("Found match for outgoing rule. Match: {}", shortDebugString(response));
             }
             state = State.OUTGOING_MATCHED;
+            // Add Reject to possible responses.
+            try {
+                incomingRule.updateRule(generateReject(outgoingRule.getResponse()));
+            } catch (FieldNotFoundException e) {
+                LOGGER.warn(format("Unable to get RefSeqNum from message header. Message: %s", outgoingRule.getResponse()), e);
+            }
             isInBuffer(incomingRule);
         }
+    }
+
+    private ResponseMapper generateReject(MessageOrBuilder outgoingMessage) throws FieldNotFoundException {
+        String sequence = ActUtils.getMatchingValue(outgoingMessage, List.of("header", "MsgSeqNum")).getSimpleValue();
+        return new ResponseMapper(ResponseStatus.FAILED, "Reject", Map.of(new FieldPath("RefSeqNum"), ValueMatcher.equal(sequence)));
     }
 
     private void processIncomingMessages(String consumingTag, MessageBatch batch) {

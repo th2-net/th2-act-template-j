@@ -59,4 +59,9 @@ public class MessagePropertiesCheckRule extends AbstractSingleConnectionRule {
     public ResponseStatus getResponseStatus() {
         return null;
     }
+
+    @Override
+    public void updateRule(Object... updateParameters) {
+
+    }
 }

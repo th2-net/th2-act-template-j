@@ -17,6 +17,7 @@ package com.exactpro.th2.act.rules;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -38,12 +39,12 @@ import com.exactpro.th2.common.grpc.Value;
 
 public class FieldsCheckRule extends AbstractSingleConnectionRule {
     private static final Logger LOGGER = LoggerFactory.getLogger(FieldsCheckRule.class);
-    private final List<ResponseMapper> responseMapping;
+    private final ArrayList<ResponseMapper> responseMapping;
     private ResponseStatus responseStatus;
 
     public FieldsCheckRule(List<ResponseMapper> responseMapping, ConnectionID requestConnId) {
         super(requestConnId);
-        this.responseMapping = responseMapping;
+        this.responseMapping = new ArrayList<>(responseMapping);
     }
 
     private static boolean checkExpectedFields(MessageOrBuilder message, Map<FieldPath, ValueMatcher> matchingFields) {
@@ -92,5 +93,14 @@ public class FieldsCheckRule extends AbstractSingleConnectionRule {
     @Override
     public ResponseStatus getResponseStatus() {
         return responseStatus;
+    }
+
+    @Override
+    public void updateRule(Object... updateParameters) {
+        for (Object parameter : updateParameters) {
+            if (parameter instanceof ResponseMapper) {
+                responseMapping.add((ResponseMapper)parameter);
+            }
+        }
     }
 }

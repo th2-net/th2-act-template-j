@@ -55,4 +55,9 @@ public class EventIDCheckRule extends AbstractSingleConnectionRule {
     public ResponseStatus getResponseStatus() {
         return null;
     }
+
+    @Override
+    public void updateRule(Object... updateParameters) {
+
+    }
 }

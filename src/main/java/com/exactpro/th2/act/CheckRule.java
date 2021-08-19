@@ -49,4 +49,6 @@ public interface CheckRule {
      */
     @Nullable
     ResponseStatus getResponseStatus();
+
+    void updateRule(Object... updateParameters);
 }
