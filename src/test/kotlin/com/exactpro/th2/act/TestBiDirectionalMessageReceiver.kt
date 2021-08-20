@@ -124,6 +124,10 @@ class TestBiDirectionalMessageReceiver {
             TODO("Not yet implemented")
         }
 
+        override fun updateRule(vararg updateParameters: Any?) {
+            TODO("Not yet implemented")
+        }
+
         override fun checkMessageFromConnection(message: Message): Boolean = this.message === message
     }
 }
