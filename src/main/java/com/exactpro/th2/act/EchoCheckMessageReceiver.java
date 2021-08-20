@@ -129,7 +129,7 @@ public class EchoCheckMessageReceiver extends AbstractMessageReceiver {
             state = State.OUTGOING_MATCHED;
             // Add Reject to possible responses.
             try {
-                incomingRule.updateRule(generateReject(outgoingRule.getResponse()));
+                incomingRule.updateRule(generateRejectMapper(outgoingRule.getResponse()));
             } catch (FieldNotFoundException e) {
                 LOGGER.warn(format("Unable to get RefSeqNum from message header. Message: %s", outgoingRule.getResponse()), e);
             }
@@ -137,7 +137,7 @@ public class EchoCheckMessageReceiver extends AbstractMessageReceiver {
         }
     }
 
-    private ResponseMapper generateReject(MessageOrBuilder outgoingMessage) throws FieldNotFoundException {
+    private ResponseMapper generateRejectMapper(MessageOrBuilder outgoingMessage) throws FieldNotFoundException {
         String sequence = ActUtils.getMatchingValue(outgoingMessage, List.of("header", "MsgSeqNum")).getSimpleValue();
         return new ResponseMapper(ResponseStatus.FAILED, "Reject", Map.of(new FieldPath("RefSeqNum"), ValueMatcher.equal(sequence)));
     }
