@@ -21,6 +21,7 @@ import java.util.Objects;
 
 import javax.annotation.Nullable;
 
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
 
@@ -42,4 +43,15 @@ public abstract class AbstractMessageReceiver implements AutoCloseable {
     protected void signalAboutReceived() {
         monitor.responseReceived();
     }
+
+    @Nullable
+    public abstract State getState();
+
+    @Nullable
+    public abstract ResponseStatus getResponseStatus();
+
+    public enum State {
+        START, OUTGOING_MATCHED, INCOMING_MATCHED
+    }
+
 }

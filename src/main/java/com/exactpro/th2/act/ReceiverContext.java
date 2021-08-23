@@ -13,15 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.schema.message.MessageListener;
+import static java.util.Objects.requireNonNull;
 
-public interface SubscriptionManager {
-    void register(Direction direction, MessageListener<MessageBatch> listener);
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.EventID;
 
-    boolean unregister(Direction direction, MessageListener<MessageBatch> listener);
+public class ReceiverContext {
+    private final ConnectionID connectionID;
+    private final EventID parentId;
+
+    public ReceiverContext(ConnectionID connectionID, EventID parentId) {
+        this.connectionID = requireNonNull(connectionID, "'Connection id' parameter");
+        this.parentId = requireNonNull(parentId, "'Parent id' parameter");
+    }
+
+    public ConnectionID getConnectionID() {
+        return connectionID;
+    }
+
+    public EventID getParentId() {
+        return parentId;
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import java.util.Collection;
 
 import javax.annotation.Nullable;
 
+import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
 
@@ -41,4 +42,13 @@ public interface CheckRule {
      */
     @Nullable
     Message getResponse();
+
+    /**
+     * Matched responseStatus
+     * @return the matched responseStatus or {@code null}
+     */
+    @Nullable
+    ResponseStatus getResponseStatus();
+
+    void updateRule(Object... updateParameters);
 }

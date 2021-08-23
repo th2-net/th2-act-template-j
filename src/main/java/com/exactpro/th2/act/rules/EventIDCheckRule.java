@@ -13,41 +13,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.exactpro.th2.act.rules;
-
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
 
 import javax.annotation.Nullable;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Message;
 
-public class MessagePropertiesCheckRule extends AbstractSingleConnectionRule {
-    private final Map<String, String> expectedProperties;
+public class EventIDCheckRule extends AbstractSingleConnectionRule {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventIDCheckRule.class);
+    private final String eventID;
+    private final Direction direction;
 
-    public MessagePropertiesCheckRule(ConnectionID requestConnId, Map<String, String> expectedProperties) {
+    public EventIDCheckRule(String eventID, ConnectionID requestConnId, Direction direction) {
         super(requestConnId);
-        this.expectedProperties = Objects.requireNonNull(expectedProperties, "'Expected properties' parameter");
-        if (expectedProperties.isEmpty()) {
-            throw new IllegalArgumentException("At least one property must be specified in expected properties");
-        }
+        this.direction = direction;
+        this.eventID = eventID;
     }
 
     @Override
     protected boolean checkMessageFromConnection(Message message) {
-        Map<String, String> propertiesMap = message.getMetadata().getPropertiesMap();
-        for (Entry<String, String> entry : expectedProperties.entrySet()) {
-            String expectedKey = entry.getKey();
-            String expectedValue = entry.getValue();
-            if (!expectedValue.equals(propertiesMap.get(expectedKey))) {
-                return false;
-            }
+        String incEventID = message.getParentEventId().getId();
+        if (incEventID.equals(eventID) && message.getMetadata().getId().getDirection() == direction) {
+            LOGGER.debug("EventIDCheckRule passed on {} messageType", message.getMetadata().getMessageType());
+            return true;
         }
-        return true;
+        return false;
     }
 
     /**

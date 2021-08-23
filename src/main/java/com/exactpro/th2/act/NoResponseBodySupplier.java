@@ -13,15 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.schema.message.MessageListener;
+import java.util.Collection;
 
-public interface SubscriptionManager {
-    void register(Direction direction, MessageListener<MessageBatch> listener);
+import com.exactpro.th2.common.event.IBodyData;
 
-    boolean unregister(Direction direction, MessageListener<MessageBatch> listener);
+public interface NoResponseBodySupplier {
+    Collection<IBodyData> createNoResponseBody();
 }

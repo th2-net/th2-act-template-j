@@ -17,24 +17,29 @@ package com.exactpro.th2.act.rules
 
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.common.grpc.Direction.FIRST
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.message.message
 import org.junit.jupiter.api.Test
 import strikt.api.expect
-import strikt.assertions.*
+import strikt.assertions.isFalse
+import strikt.assertions.isNotNull
+import strikt.assertions.isNull
+import strikt.assertions.isSameInstanceAs
+import strikt.assertions.isTrue
 import java.util.concurrent.ThreadLocalRandom
 
-class TestParentIdCheckRule {
+class TestEventIDCheckRule {
     private val parentId = EventID.newBuilder().setId("test").build()
     private val connectionId = ConnectionID.newBuilder()
-            .setSessionAlias("test")
-            .build()
-    private val rule = ParentIdCheckRule(parentId, connectionId)
+        .setSessionAlias("test")
+        .build()
+    private val rule = EventIDCheckRule(parentId.id, connectionId, FIRST)
 
     @Test
     fun `finds match`() {
         val message = message("test", Direction.FIRST, "test")
-                .setParentEventId(parentId)
+            .setParentEventId(parentId)
                 .build()
 
         expect {
