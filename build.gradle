@@ -12,7 +12,7 @@ buildscript {
 
 plugins {
     id 'com.palantir.docker' version '0.25.0'
-    id 'org.jetbrains.kotlin.jvm' version '1.3.72'
+    id 'org.jetbrains.kotlin.jvm' version "${kotlin_version}"
     id 'java'
     id 'java-library'
     id 'application'
@@ -88,9 +88,9 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
-    implementation "com.exactpro.th2:common:3.16.5"
-    implementation "com.exactpro.th2:grpc-act-template:3.2.0"
-    implementation "com.exactpro.th2:grpc-check1:3.2.0"
+    implementation "com.exactpro.th2:common:3.19.0"
+    implementation "com.exactpro.th2:grpc-act-template:$grpc_act_version"
+    implementation "com.exactpro.th2:grpc-check1:3.3.0"
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
@@ -98,7 +98,8 @@ dependencies {
     implementation "org.slf4j:slf4j-log4j12"
     implementation "org.slf4j:slf4j-api"
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    implementation group: 'org.jetbrains.kotlin', name: 'kotlin-stdlib-jdk8', version: kotlin_version
+    implementation group: 'io.github.microutils', name: 'kotlin-logging', version: '1.7.9'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation "io.strikt:strikt-core:0.30.0"

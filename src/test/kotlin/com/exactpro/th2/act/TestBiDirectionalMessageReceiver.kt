@@ -17,15 +17,15 @@ package com.exactpro.th2.act
 
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl
 import com.exactpro.th2.act.rules.AbstractSingleConnectionRule
+import com.exactpro.th2.act.receiver.AbstractMessageReceiver
+import com.exactpro.th2.act.receiver.BiDirectionalMessageReceiver
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageBatch
 import com.exactpro.th2.common.message.message
 import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.same
 import com.nhaarman.mockitokotlin2.verify
-import com.nhaarman.mockitokotlin2.whenever
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.assertions.containsExactlyInAnyOrder
@@ -41,12 +41,13 @@ class TestBiDirectionalMessageReceiver {
     private val manager = SubscriptionManagerImpl()
     private val monitor: ResponseMonitor = mock { }
 
-    private fun receiver(outgoing: CheckRule, incomingSupplier: (Message) -> CheckRule): AbstractMessageReceiver = BiDirectionalMessageReceiver(
+    private fun receiver(outgoing: CheckRule, incomingSupplier: (Message) -> CheckRule): AbstractMessageReceiver =
+        BiDirectionalMessageReceiver(
             manager,
             monitor,
             outgoing,
             Function(incomingSupplier)
-    )
+        )
 
     @Test
     fun `works in normal case`() {

@@ -1,4 +1,4 @@
-# th2 act template (3.4.1)
+# th2 act template (3.5.0)
 
 ## Overview
 
@@ -60,6 +60,10 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 
 ## Release Notes
+
+### 3.5.0
+
++ created Kotlin template
 
 ### 3.4.1
 
