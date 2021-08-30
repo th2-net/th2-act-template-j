@@ -46,9 +46,7 @@ import com.exactpro.th2.common.grpc.Value
 import com.exactpro.th2.common.message.getField
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.message.toTreeTable
-import com.fasterxml.jackson.core.JsonProcessingException
 import com.google.protobuf.TextFormat.shortDebugString
-import com.google.protobuf.util.JsonFormat
 import io.grpc.Context
 import io.grpc.Deadline
 import io.grpc.stub.StreamObserver
@@ -219,7 +217,7 @@ class ActHandlerKt(
             }.toProtoEvent(parentEventId.id))
 
             val response = PlaceMessageResponse.newBuilder().apply {
-                responseMessage = responseMessage
+                responseMessage = response
                 statusBuilder.apply {
                     this.status = if (status) RequestStatus.Status.SUCCESS else RequestStatus.Status.ERROR
                 }
@@ -236,6 +234,7 @@ class ActHandlerKt(
                 status(FAILED)
                 processedMessageIDs().forEach(this::messageID)
             }.toProtoEvent(parentEventId.id))
+            responseObserver.sendErrorResponse(message)
         }
     }
 
