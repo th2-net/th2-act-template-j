@@ -28,8 +28,10 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,6 +45,9 @@ import com.exactpro.th2.act.ResponseMapper.FieldPath;
 import com.exactpro.th2.act.ResponseMapper.ResponseStatus;
 import com.exactpro.th2.act.ResponseMapper.ValueMatcher;
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
+import com.exactpro.th2.act.grpc.MatchingField;
+import com.exactpro.th2.act.grpc.MessageRequest;
+import com.exactpro.th2.act.grpc.MessageResponse;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
@@ -146,6 +151,50 @@ public class ActHandler extends ActImplBase {
         } catch (FieldNotFoundException e) {
             reportFieldNotFound(request, responseObserver, matchingFieldPath, actName, e);
         }
+    }
+
+    /**
+     * @param request
+     * @param responseObserver
+     */
+    @Override
+    public void requestMessage(MessageRequest request, StreamObserver<MessageResponse> responseObserver) {
+
+        List<ResponseMapper> responseMapping = new ArrayList<>();
+        for (com.exactpro.th2.act.grpc.ResponseMapper mapper : request.getResponseMappersList()) {
+            Map<FieldPath, ValueMatcher> matchingValues = new HashMap<>();
+            for (MatchingField matchingField : mapper.getMatchingFieldsList()) {
+                matchingValues.put(new FieldPath(matchingField.getPathList().toArray(new String[0])), ValueMatcher.equal(matchingField.getValue()));
+            }
+            responseMapping.add(new ResponseMapper(mapper.getIsPassed() ? ResponseStatus.PASSED : ResponseStatus.FAILED, mapper.getMessageType(), matchingValues));
+        }
+
+        try {
+            EventID parentId = eventSender.createAndStoreParentEvent(request.getDescription(), "RequestMessage", request.getStream().getSessionAlias(), PASSED, request.getParentEventId());
+            CheckRule messageCheckRule = new FieldsCheckRule(responseMapping, request.getStream());
+            MessageResponseMonitor monitor = new MessageResponseMonitor();
+            AbstractMessageReceiver receiver = new MessagesReceiver(subscriptionManager, monitor, messageCheckRule, Direction.FIRST, eventSender, parentId, responseObserver, request.getTimeout());
+
+            if (Context.current().isCancelled()) {
+                LOGGER.warn("requestMessage cancelled by client");
+                responseObserver.onNext(MessageResponse.newBuilder()
+                        .setStatus(RequestStatus.newBuilder()
+                                .setStatus(ERROR)
+                                .setMessage("The request has been cancelled by the client")
+                                .build())
+                        .build());
+                responseObserver.onCompleted();
+            }
+        } catch (JsonProcessingException e) {
+            responseObserver.onNext(MessageResponse.newBuilder()
+                    .setStatus(RequestStatus.newBuilder()
+                            .setStatus(ERROR)
+                            .setMessage("Action failed: " + e.getMessage())
+                            .build())
+                    .build());
+            responseObserver.onCompleted();
+        }
+
     }
 
     private void placeTemplate(PlaceMessageRequestOrBuilder request, StreamObserver<PlaceMessageResponse> responseObserver, String requestMessageType, String actName,
