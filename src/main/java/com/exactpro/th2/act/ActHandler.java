@@ -84,7 +84,7 @@ public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
-    private final Check1Service verifierConnector;
+    private final Check1Service check1Service;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<MessageBatch> messageRouter;
     private final SubscriptionManager subscriptionManager;
@@ -93,11 +93,11 @@ public class ActHandler extends ActImplBase {
             MessageRouter<MessageBatch> router,
             SubscriptionManager subscriptionManager,
             MessageRouter<EventBatch> eventBatchRouter,
-            Check1Service verifierService
+            Check1Service check1Service
     ) {
         this.messageRouter = requireNonNull(router, "'Router' parameter");
         this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
-        this.verifierConnector = requireNonNull(verifierService, "'Verifier service' parameter");
+        this.check1Service = requireNonNull(check1Service, "'check1 service' parameter");
         this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
     }
 
@@ -316,10 +316,10 @@ public class ActHandler extends ActImplBase {
                 .status(status)
                 .endTimestamp(); // FIXME set properly as is in the last child
 
-        com.exactpro.th2.common.grpc.Event protoEvent = event.toProtoEvent(request.getParentEventId().getId());
+        com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProtoEvent(request.getParentEventId().getId())).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -539,7 +539,7 @@ public class ActHandler extends ActImplBase {
 
     private Checkpoint registerCheckPoint(EventID parentEventId) {
         LOGGER.debug("Registering the checkpoint started");
-        CheckpointResponse response = verifierConnector.createCheckpoint(CheckpointRequest.newBuilder()
+        CheckpointResponse response = check1Service.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)
                 .build());
         if (LOGGER.isDebugEnabled()) {
