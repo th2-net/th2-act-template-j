@@ -1,4 +1,4 @@
-# th2 act template (3.4.1)
+# th2 act template (3.5.0)
 
 ## Overview
 
@@ -60,6 +60,12 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 
 ## Release Notes
+
+### 3.5.0
+
++ Update `th2-common` version from `3.16.5` to `3.26.4`
++ Update `th2-grpc-act-template` version from `3.2.0` to `3.4.0`
++ Update `th2-grpc-check1` version from `3.2.0` to `3.4.2`
 
 ### 3.4.1
 
