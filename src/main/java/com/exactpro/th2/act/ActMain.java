@@ -15,8 +15,8 @@
  */
 package com.exactpro.th2.act;
 
-import static com.exactpro.th2.common.metrics.CommonMetrics.setLiveness;
-import static com.exactpro.th2.common.metrics.CommonMetrics.setReadiness;
+import static com.exactpro.th2.common.metrics.CommonMetrics.LIVENESS_MONITOR;
+import static com.exactpro.th2.common.metrics.CommonMetrics.READINESS_MONITOR;
 
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -46,7 +46,7 @@ public class ActMain {
 
         configureShutdownHook(resources, lock, condition);
         try {
-            setLiveness(true);
+            LIVENESS_MONITOR.enable();
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
 
@@ -68,7 +68,7 @@ public class ActMain {
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             resources.add(actServer::stop);
-            setReadiness(true);
+            READINESS_MONITOR.enable();
             LOGGER.info("Act started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {
@@ -95,7 +95,7 @@ public class ActMain {
             @Override
             public void run() {
                 LOGGER.info("Shutdown start");
-                setReadiness(false);
+                READINESS_MONITOR.disable();
                 try {
                     lock.lock();
                     condition.signalAll();
@@ -110,7 +110,7 @@ public class ActMain {
                         LOGGER.error(e.getMessage(), e);
                     }
                 });
-                setLiveness(false);
+                LIVENESS_MONITOR.disable();
                 LOGGER.info("Shutdown end");
             }
         });
