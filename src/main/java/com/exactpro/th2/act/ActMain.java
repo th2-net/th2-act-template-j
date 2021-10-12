@@ -15,8 +15,8 @@
  */
 package com.exactpro.th2.act;
 
-import static com.exactpro.th2.common.metrics.CommonMetrics.registerLiveness;
-import static com.exactpro.th2.common.metrics.CommonMetrics.registerReadiness;
+import static com.exactpro.th2.common.metrics.CommonMetrics.LIVENESS_MONITOR;
+import static com.exactpro.th2.common.metrics.CommonMetrics.READINESS_MONITOR;
 
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -29,7 +29,6 @@ import org.slf4j.LoggerFactory;
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.metrics.MetricMonitor;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -39,8 +38,6 @@ public class ActMain {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ActMain.class);
     private static final String OE_ATTRIBUTE_NAME = "oe";
-    private static final MetricMonitor LIVENESS_MONITOR = registerLiveness("act_liveness");
-    private static final MetricMonitor READINESS_MONITOR = registerReadiness("act_readiness");
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
