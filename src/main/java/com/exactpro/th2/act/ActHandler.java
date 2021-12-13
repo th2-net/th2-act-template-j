@@ -131,7 +131,7 @@ public class ActHandler extends ActImplBase {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("marketdatarequest request: " + shortDebugString(request));
             }
-            placeMessageFieldRule(request, responseObserver, "MarketDataRequest", request.getMessage().getFieldsMap().get("	MDReqID").getSimpleValue(),
+            placeMessageFieldRule(request, responseObserver, "MarketDataRequest", request.getMessage().getFieldsMap().get("MDReqID").getSimpleValue(),
                     ImmutableMap.of("Snapshot", CheckMetadata.passOn("MDReqID"), "MarketDataRequestReject", CheckMetadata.failOn("MDReqID")), "MarketDataRequest");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to request an data. Message = {}", request.getMessage(), e);
