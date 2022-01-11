@@ -17,15 +17,13 @@ package com.exactpro.th2.act
 
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl
 import com.exactpro.th2.act.rules.AbstractSingleConnectionRule
+import com.exactpro.th2.act.util.createDefaultMessage
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.message.message
 import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.same
 import com.nhaarman.mockitokotlin2.verify
-import com.nhaarman.mockitokotlin2.whenever
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.assertions.containsExactlyInAnyOrder
@@ -50,8 +48,8 @@ class TestBiDirectionalMessageReceiver {
 
     @Test
     fun `works in normal case`() {
-        val messageA = message("A", Direction.SECOND, "test").build()
-        val messageB = message("B", Direction.FIRST, "test").build()
+        val messageA = createDefaultMessage("A", Direction.SECOND).build()
+        val messageB = createDefaultMessage("B", Direction.FIRST).build()
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
@@ -71,8 +69,8 @@ class TestBiDirectionalMessageReceiver {
 
     @Test
     fun `works if incoming is processed before outgoing`() {
-        val messageA = message("A", Direction.SECOND, "test").build()
-        val messageB = message("B", Direction.FIRST, "test").build()
+        val messageA = createDefaultMessage("A", Direction.SECOND).build()
+        val messageB = createDefaultMessage("B", Direction.FIRST).build()
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
@@ -92,9 +90,9 @@ class TestBiDirectionalMessageReceiver {
 
     @Test
     fun `works if incoming received after the buffered message`() {
-        val messageA = message("A", Direction.SECOND, "test").build()
-        val messageB = message("B", Direction.FIRST, "test").build()
-        val messageC = message("C", Direction.FIRST, "test").build()
+        val messageA = createDefaultMessage("A", Direction.SECOND).build()
+        val messageB = createDefaultMessage("B", Direction.FIRST).build()
+        val messageC = createDefaultMessage("C", Direction.FIRST).build()
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageC, connectionID) }
         receiver.use {

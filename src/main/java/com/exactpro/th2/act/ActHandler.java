@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -310,7 +310,7 @@ public class ActHandler extends ActImplBase {
         long startTime = System.currentTimeMillis();
 
         Event event = start()
-                .name(actName + ' ' + request.getConnectionId().getSessionAlias())
+                .name(actName + ' ' + request.getMessage().getMetadata().getId().getConnectionId().getSessionAlias())
                 .description(request.getDescription())
                 .type(actName)
                 .status(status)
@@ -342,7 +342,7 @@ public class ActHandler extends ActImplBase {
         for(MessageID msgID : messageIDList){
             errorEvent.messageID(msgID);
         }
-        storeEvent(errorEvent.toProtoEvent(parentEventId.getId()));
+        storeEvent(errorEvent.toProto(parentEventId));
     }
 
     private IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
@@ -390,7 +390,7 @@ public class ActHandler extends ActImplBase {
                     .status(checkMetadata.getEventStatus())
                     .bodyData(parametersTable)
                     .messageID(metadata.getId())
-                    .toProtoEvent(parentEventId.getId())
+                    .toProto(parentEventId)
             );
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage)
@@ -449,7 +449,7 @@ public class ActHandler extends ActImplBase {
         return Message.newBuilder(request.getMessage())
                 .mergeMetadata(MessageMetadata.newBuilder()
                         .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getConnectionId())
+                                .setConnectionId(request.getMessage().getMetadata().getId().getConnectionId())
                                 .build())
                         .build())
                 .build();

@@ -15,10 +15,9 @@
  */
 package com.exactpro.th2.act.rules
 
+import com.exactpro.th2.act.util.createDefaultMessage
 import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageMetadata
-import com.exactpro.th2.common.message.message
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.assertions.*
@@ -34,7 +33,7 @@ class TestMessagePropertiesCheckRule {
 
     @Test
     fun `finds match`() {
-        val message = message("test", Direction.FIRST, "test")
+        val message = createDefaultMessage()
                 .mergeMetadata(
                         MessageMetadata.newBuilder()
                                 .putAllProperties(mapOf(
@@ -55,7 +54,7 @@ class TestMessagePropertiesCheckRule {
 
     @Test
     fun `skips messages if any property is not matched`() {
-        val message = message("test", Direction.FIRST, "test")
+        val message = createDefaultMessage()
                 .mergeMetadata(
                         MessageMetadata.newBuilder()
                                 .putAllProperties(mapOf(
@@ -74,7 +73,7 @@ class TestMessagePropertiesCheckRule {
 
     @Test
     fun `skips messages if any property is missed`() {
-        val message = message("test", Direction.FIRST, "test")
+        val message = createDefaultMessage()
                 .mergeMetadata(
                         MessageMetadata.newBuilder()
                                 .putAllProperties(mapOf(
