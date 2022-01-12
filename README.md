@@ -65,9 +65,9 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 + Update `kotlin.jvm` version from `1.3.72` to `1.5.30`
 + Migration to books/pages cradle 4.0.0
-    + Update `th2-common` version from `3.26.4` to `4.0.0-th2-2150-books-pages-1606747040-SNAPSHOT`
-    + Update `th2-grpc-act-template` version from `3.4.0` to `4.0.0-th2-2150-books-pages-1681606040-SNAPSHOT`
-    + Update `th2-grpc-check1` version from `3.4.2` to `4.0.0-th2-2150-books-pages-1628253419-SNAPSHOT`
+    + Update `th2-common` version from `3.26.4` to `4.0.0`
+    + Update `th2-grpc-act-template` version from `3.4.0` to `4.0.0`
+    + Update `th2-grpc-check1` version from `3.4.2` to `4.0.0`
 
 ### 3.5.0
 
