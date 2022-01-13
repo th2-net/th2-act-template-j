@@ -18,9 +18,10 @@ package com.exactpro.th2.act.util
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.message.message
 
-fun createDefaultMessage() = createDefaultMessage("test", Direction.FIRST)
-
-fun createDefaultMessage(messageType: String, direction: Direction) = message(
+fun createDefaultMessage(
+    messageType: String = "test",
+    direction: Direction = Direction.FIRST,
+) = message(
     "test",
     messageType,
     direction,

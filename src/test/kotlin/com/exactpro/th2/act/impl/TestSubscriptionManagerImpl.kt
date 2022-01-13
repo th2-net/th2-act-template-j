@@ -39,7 +39,7 @@ class TestSubscriptionManagerImpl {
         listeners.forEach { (dir, listener) -> manager.register(dir, listener) }
 
         val batch = MessageBatch.newBuilder()
-                .addMessages(createDefaultMessage("test", direction))
+                .addMessages(createDefaultMessage(direction = direction))
                 .build()
         manager.handler("", batch)
 
@@ -66,7 +66,7 @@ class TestSubscriptionManagerImpl {
         manager.unregister(direction, listener)
 
         val batch = MessageBatch.newBuilder()
-                .addMessages(createDefaultMessage("test", direction))
+                .addMessages(createDefaultMessage(direction = direction))
                 .build()
         manager.handler("", batch)
 
