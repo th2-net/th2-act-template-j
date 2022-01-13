@@ -145,7 +145,7 @@ public class ActHandler extends ActImplBase {
             }
 
             try {
-                sendMessage(backwardCompatibilityConnectionId(request), parentId);
+                sendMessage(request.getMessage(), parentId);
             } catch (Exception ex) {
                 createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -254,7 +254,7 @@ public class ActHandler extends ActImplBase {
                               NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
-        Message message = backwardCompatibilityConnectionId(request);
+        Message message = request.getMessage();
         checkRequestMessageType(expectedRequestType, message.getMetadata());
         ConnectionID requestConnId = message.getMetadata().getId().getConnectionId();
 
@@ -439,20 +439,6 @@ public class ActHandler extends ActImplBase {
         } finally {
             LOGGER.debug("Sending the message ended");
         }
-    }
-
-    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
-        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
-        if (!connectionId.getSessionAlias().isEmpty()) {
-            return request.getMessage();
-        }
-        return Message.newBuilder(request.getMessage())
-                .mergeMetadata(MessageMetadata.newBuilder()
-                        .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getMessage().getMetadata().getId().getConnectionId())
-                                .build())
-                        .build())
-                .build();
     }
 
     private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {
