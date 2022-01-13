@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ public class ActHandler extends ActImplBase {
             }
 
             try {
-                sendMessage(backwardCompatibilityConnectionId(request), parentId);
+                sendMessage(request.getMessage(), parentId);
             } catch (Exception ex) {
                 createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -254,7 +254,7 @@ public class ActHandler extends ActImplBase {
                               NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
-        Message message = backwardCompatibilityConnectionId(request);
+        Message message = request.getMessage();
         checkRequestMessageType(expectedRequestType, message.getMetadata());
         ConnectionID requestConnId = message.getMetadata().getId().getConnectionId();
 
@@ -310,7 +310,7 @@ public class ActHandler extends ActImplBase {
         long startTime = System.currentTimeMillis();
 
         Event event = start()
-                .name(actName + ' ' + request.getConnectionId().getSessionAlias())
+                .name(actName + ' ' + request.getMessage().getMetadata().getId().getConnectionId().getSessionAlias())
                 .description(request.getDescription())
                 .type(actName)
                 .status(status)
@@ -342,7 +342,7 @@ public class ActHandler extends ActImplBase {
         for(MessageID msgID : messageIDList){
             errorEvent.messageID(msgID);
         }
-        storeEvent(errorEvent.toProtoEvent(parentEventId.getId()));
+        storeEvent(errorEvent.toProto(parentEventId));
     }
 
     private IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
@@ -390,7 +390,7 @@ public class ActHandler extends ActImplBase {
                     .status(checkMetadata.getEventStatus())
                     .bodyData(parametersTable)
                     .messageID(metadata.getId())
-                    .toProtoEvent(parentEventId.getId())
+                    .toProto(parentEventId)
             );
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage)
@@ -439,20 +439,6 @@ public class ActHandler extends ActImplBase {
         } finally {
             LOGGER.debug("Sending the message ended");
         }
-    }
-
-    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
-        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
-        if (!connectionId.getSessionAlias().isEmpty()) {
-            return request.getMessage();
-        }
-        return Message.newBuilder(request.getMessage())
-                .mergeMetadata(MessageMetadata.newBuilder()
-                        .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getConnectionId())
-                                .build())
-                        .build())
-                .build();
     }
 
     private com.exactpro.th2.common.grpc.Event createSendMessageEvent(Message message, EventID parentEventId) throws JsonProcessingException {

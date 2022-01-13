@@ -15,13 +15,12 @@
  */
 package com.exactpro.th2.act.impl
 
+import com.exactpro.th2.act.util.createDefaultMessage
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageBatch
-import com.exactpro.th2.common.message.message
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.nhaarman.mockitokotlin2.*
 import org.junit.jupiter.api.Assertions
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.function.Executable
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -40,7 +39,7 @@ class TestSubscriptionManagerImpl {
         listeners.forEach { (dir, listener) -> manager.register(dir, listener) }
 
         val batch = MessageBatch.newBuilder()
-                .addMessages(message("test", direction, "test"))
+                .addMessages(createDefaultMessage(direction = direction))
                 .build()
         manager.handler("", batch)
 
@@ -67,7 +66,7 @@ class TestSubscriptionManagerImpl {
         manager.unregister(direction, listener)
 
         val batch = MessageBatch.newBuilder()
-                .addMessages(message("test", direction, "test"))
+                .addMessages(createDefaultMessage(direction = direction))
                 .build()
         manager.handler("", batch)
 
