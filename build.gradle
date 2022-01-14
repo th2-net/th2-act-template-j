@@ -89,7 +89,7 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'com.exactpro.th2:common:3.26.4'
-    implementation 'com.exactpro.th2:grpc-act-template:3.5.0.11111.dev1693211367'
+    implementation 'com.exactpro.th2:grpc-act-template:3.5.0.11111-1.5.4-MDR-1693211365-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:3.4.2'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
