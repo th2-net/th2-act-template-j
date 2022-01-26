@@ -1,4 +1,4 @@
-# th2 act template (3.5.0)
+# th2 act template (3.6.0)
 
 ## Overview
 
@@ -60,6 +60,13 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 
 ## Release Notes
+
+### 3.6.0
+
++ Add new method for sending OrderCancelRequest
++ Update `th2-common` version from `3.26.4` to `3.32.0`
++ Update `th2-grpc-act-template` version from `3.4.0` to `3.6.0`
++ Update `th2-grpc-check1` version from `3.4.2` to `3.5.1`
 
 ### 3.5.0
 

@@ -126,6 +126,22 @@ public class ActHandler extends ActImplBase {
     }
 
     @Override
+    public void placeCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+        try {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("placeCancelFIX request: " + shortDebugString(request));
+            }
+            placeMessageFieldRule(request, responseObserver, "OrderCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeCancelFIX");
+        } catch (RuntimeException | JsonProcessingException e) {
+            LOGGER.error("Failed to place an OrderCancelRequest. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place an OrderCancelRequest. Error: " + e.getMessage());
+        } finally {
+            LOGGER.debug("placeCancelFIX has finished");
+        }
+    }
+
+    @Override
     public void sendMessage(PlaceMessageRequest request, StreamObserver<SendMessageResponse> responseObserver) {
         long startPlaceMessage = System.currentTimeMillis();
         try {

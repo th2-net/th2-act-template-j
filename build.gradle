@@ -86,11 +86,11 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.0.0')
+    api platform('com.exactpro.th2:bom:3.1.0')
 
-    implementation 'com.exactpro.th2:common:3.26.4'
-    implementation 'com.exactpro.th2:grpc-act-template:3.4.0'
-    implementation 'com.exactpro.th2:grpc-check1:3.4.2'
+    implementation 'com.exactpro.th2:common:3.32.0'
+    implementation 'com.exactpro.th2:grpc-act-template:3.6.0'
+    implementation 'com.exactpro.th2:grpc-check1:3.5.1'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
