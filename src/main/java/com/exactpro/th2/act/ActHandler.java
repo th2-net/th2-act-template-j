@@ -15,6 +15,33 @@
  */
 package com.exactpro.th2.act;
 
+import static com.exactpro.th2.common.event.Event.Status.FAILED;
+import static com.exactpro.th2.common.event.Event.Status.PASSED;
+import static com.exactpro.th2.common.event.Event.start;
+import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
+import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
+import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.lang.String.format;
+import static java.time.Instant.ofEpochMilli;
+import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.toUnmodifiableMap;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.exactpro.th2.act.EventUtils.MessageTableColumn;
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
@@ -33,52 +60,28 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.Checkpoint;
+import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.Checkpoint;
-import com.exactpro.th2.common.grpc.RequestStatus;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.grpc.MessageOrBuilder;
-import com.exactpro.th2.common.grpc.MessageMetadata;
-import com.exactpro.th2.common.grpc.Value;
-import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.RequestStatus;
+import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.stub.StreamObserver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
-
-import static com.exactpro.th2.common.event.Event.Status.FAILED;
-import static com.exactpro.th2.common.event.Event.Status.PASSED;
-import static com.exactpro.th2.common.event.Event.start;
-import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
-import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
-import static com.google.protobuf.TextFormat.shortDebugString;
-import static java.lang.String.format;
-import static java.time.Instant.ofEpochMilli;
-import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
@@ -122,6 +125,22 @@ public class ActHandler extends ActImplBase {
             sendErrorResponse(responseObserver, "Failed to place an order. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderFIX has finished");
+        }
+    }
+
+    @Override
+    public void placeSecurityStatusRequest(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+        try {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("placeSecurityStatusRequest: " + shortDebugString(request));
+            }
+            placeMessageFieldRule(request, responseObserver, "SecurityStatusRequest", request.getMessage().getFieldsMap().get("SecurityID").getSimpleValue(),
+                    ImmutableMap.of("SecurityStatus", CheckMetadata.passOn("SecurityID")), "placeSecurityStatusRequest");
+        } catch (RuntimeException | JsonProcessingException e) {
+            LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place SecurityStatusRequest. Error: " + e.getMessage());
+        } finally {
+            LOGGER.debug("placeSecurityStatusRequest has finished");
         }
     }
 
@@ -349,12 +368,11 @@ public class ActHandler extends ActImplBase {
         TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
         CollectionBuilder passedOn = new CollectionBuilder();
         CollectionBuilder failedOn = new CollectionBuilder();
-        for (Map.Entry<String, CheckMetadata> entry : expectedMessages.entrySet()) {
+        for (Entry<String, CheckMetadata> entry : expectedMessages.entrySet()) {
             if (entry.getValue().eventStatus == PASSED) {
-                passedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
-            }
-            else  {
-                failedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new EventUtils.MessageTableColumn(fieldValue)).build()).build());
+                passedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
+            } else {
+                failedOn.row(entry.getKey(), new CollectionBuilder().row(entry.getValue().fieldName, new RowBuilder().column(new MessageTableColumn(fieldValue)).build()).build());
             }
         }
         treeTableBuilder.row("PASSED on:", passedOn.build());
@@ -384,7 +402,7 @@ public class ActHandler extends ActImplBase {
             String messageType = metadata.getMessageType();
             CheckMetadata checkMetadata = expectedMessages.get(messageType);
             TreeTable parametersTable = EventUtils.toTreeTable(responseMessage);
-            storeEvent(Event.start()
+            storeEvent(start()
                     .name(format("Received '%s' response message", messageType))
                     .type("message")
                     .status(checkMetadata.getEventStatus())
@@ -459,7 +477,7 @@ public class ActHandler extends ActImplBase {
         Event event = start()
                 .name("Send '" + message.getMetadata().getMessageType() + "' message to connectivity");
         TreeTable parametersTable = EventUtils.toTreeTable(message);
-        event.status(Status.PASSED);
+        event.status(PASSED);
         event.bodyData(parametersTable);
         event.type("Outgoing message");
         return event.toProto(parentEventId);
