@@ -138,7 +138,7 @@ public class ActHandler extends ActImplBase {
                             new FieldPath("ClOrdID"), ValueMatcher.equal(matchingValue),
                             new FieldPath("ExecType"), ValueMatcher.in("0", "F", "A", "New", "Trade"))
                     ),
-                    new ResponseMapper(ResponseStatus.FAILED, "BusinessMessageReject", Map.of(
+                    new ResponseMapper(ResponseStatus.PASSED, "BusinessMessageReject", Map.of(
                             new FieldPath("BusinessRejectRefID"), ValueMatcher.equal(matchingValue))
                     ));
 
