@@ -22,7 +22,6 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.slf4j.Logger;
@@ -57,7 +56,7 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
     }
 
     @Override
-    public void handler(String s, MessageBatch messageBatch) {
+    public void handle(String s, MessageBatch messageBatch) {
         if (messageBatch.getMessagesCount() < 0) {
             if (LOGGER.isWarnEnabled()) {
                 LOGGER.warn("Empty batch received {}", shortDebugString(messageBatch));
@@ -75,7 +74,7 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
 
         for (MessageListener<MessageBatch> listener : listeners) {
             try {
-                listener.handler(s, messageBatch);
+                listener.handle(s, messageBatch);
             } catch (Exception e) {
                 if (LOGGER.isErrorEnabled()) {
                     LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(messageBatch), e);

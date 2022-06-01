@@ -41,15 +41,15 @@ class TestSubscriptionManagerImpl {
         val batch = MessageBatch.newBuilder()
                 .addMessages(createDefaultMessage(direction = direction))
                 .build()
-        manager.handler("", batch)
+        manager.handle("", batch)
 
         Assertions.assertAll(
                 listeners.map { (dir, listener) ->
                     Executable {
                         if (dir == direction) {
-                            verify(listener).handler(any(), same(batch))
+                            verify(listener).handle(any(), same(batch))
                         } else {
-                            verify(listener, never()).handler(any(), any())
+                            verify(listener, never()).handle(any(), any())
                         }
                     }
                 }
@@ -68,8 +68,8 @@ class TestSubscriptionManagerImpl {
         val batch = MessageBatch.newBuilder()
                 .addMessages(createDefaultMessage(direction = direction))
                 .build()
-        manager.handler("", batch)
+        manager.handle("", batch)
 
-        verify(listener, never()).handler(any(), any())
+        verify(listener, never()).handle(any(), any())
     }
 }

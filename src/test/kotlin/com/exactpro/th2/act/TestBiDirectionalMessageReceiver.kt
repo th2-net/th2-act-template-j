@@ -53,8 +53,8 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageA).build())
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
         }
 
         expect {
@@ -74,8 +74,8 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageB).build())
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
         }
 
         expect {
@@ -96,9 +96,9 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageC, connectionID) }
         receiver.use {
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageB).build())
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageA).build())
-            manager.handler("", MessageBatch.newBuilder().addMessages(messageC).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle("", MessageBatch.newBuilder().addMessages(messageC).build())
         }
 
         expect {
