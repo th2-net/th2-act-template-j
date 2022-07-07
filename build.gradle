@@ -88,7 +88,7 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
-    implementation 'com.exactpro.th2:common:4.0.0-th2-2150-books-pages-2414652972-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:4.0.0-th2-2150-books-pages-2569520293-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-act-template:4.0.0-th2-2150-books-pages-1681606040-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:4.0.0-th2-2150-books-pages-1628253419-SNAPSHOT'
 
