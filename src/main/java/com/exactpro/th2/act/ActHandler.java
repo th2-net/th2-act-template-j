@@ -193,6 +193,21 @@ public class ActHandler extends ActImplBase {
             LOGGER.debug("placeQuoteCancelFIX has finished");
         }
     }
+    @Override
+    public void placeSecurityStatusRequest(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+        try {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("placeSecurityStatusRequest: " + shortDebugString(request));
+            }
+            placeMessageFieldRule(request, responseObserver, "SecurityStatusRequest", request.getMessage().getFieldsMap().get("SecurityID").getSimpleValue(),
+                    ImmutableMap.of("SecurityStatus", CheckMetadata.passOn("SecurityID")), "placeSecurityStatusRequest");
+        } catch (RuntimeException | JsonProcessingException e) {
+            LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
+            sendErrorResponse(responseObserver, "Failed to place SecurityStatusRequest. Error: " + e.getMessage());
+        } finally {
+            LOGGER.debug("placeSecurityStatusRequest has finished");
+        }
+    }
 
     @Override
     public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
