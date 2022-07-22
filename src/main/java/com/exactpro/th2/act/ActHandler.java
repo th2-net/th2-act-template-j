@@ -15,11 +15,10 @@
  */
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
-import com.exactpro.th2.act.grpc.PlaceMessageRequest;
-import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
-import com.exactpro.th2.act.grpc.PlaceMessageResponse;
-import com.exactpro.th2.act.grpc.SendMessageResponse;
+import com.exactpro.th2.act.convertors.ConvertorsRequest;
+import com.exactpro.th2.act.convertors.ConvertorsResponse;
+import com.exactpro.th2.act.grpc.ActTypedGrpc.ActTypedImplBase;
+import com.exactpro.th2.act.grpc.*;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
 import com.exactpro.th2.act.rules.FieldCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
@@ -59,12 +58,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
@@ -80,7 +74,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
-public class ActHandler extends ActImplBase {
+public class ActHandler extends ActTypedImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
@@ -101,6 +95,9 @@ public class ActHandler extends ActImplBase {
         this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
     }
 
+    private final ConvertorsRequest convertorsRequest = new ConvertorsRequest();
+    private final ConvertorsResponse convertorsResponse = new ConvertorsResponse();
+
     private static long getTimeout(Deadline deadline) {
         return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
     }
@@ -110,23 +107,40 @@ public class ActHandler extends ActImplBase {
     }
 
     @Override
-    public void placeOrderFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeOrderFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("placeOrderFIX request: " + shortDebugString(request));
+                LOGGER.debug("placeOrderFIX request: " + requestMessage);
             }
-            placeMessageFieldRule(request, responseObserver, "NewOrderSingle", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderFIX");
+            String actName = "placeOrderFIX";
+
+            Map<String, CheckMetadata> expectedMessages =
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"),
+                            "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID"));
+
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "NewOrderSingle",
+                    requestMessage.getFieldsMap().get("ClOrdID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+
+            if (responseMessage != null) {
+                placeMessageResponseTyped(request, responseObserver, responseMessage, expectedMessages, actName);
+            }
+
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place an order. Error: " + e.getMessage());
+            LOGGER.error("Failed to place an order. Message = {}", request, e);
+            sendErrorMessageResponse(responseObserver, "Failed to place an order. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderFIX has finished");
         }
     }
 
     @Override
-    public void sendMessage(PlaceMessageRequest request, StreamObserver<SendMessageResponse> responseObserver) {
+    public void sendMessage(PlaceMessageRequestTyped request, StreamObserver<SendMessageResponse> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         long startPlaceMessage = System.currentTimeMillis();
         try {
             if (LOGGER.isDebugEnabled()) {
@@ -141,7 +155,7 @@ public class ActHandler extends ActImplBase {
 
             if (Context.current().isCancelled()) {
                 LOGGER.warn("'{}' request cancelled by client", actName);
-                sendMessageErrorResponse(responseObserver, "Request has been cancelled by client");
+                sendErrorSendMessageResponse(responseObserver, "Request has been cancelled by client");
             }
 
             try {
@@ -159,96 +173,221 @@ public class ActHandler extends ActImplBase {
             responseObserver.onCompleted();
 
         } catch (RuntimeException | IOException e) {
-            LOGGER.error("Failed to send a message. Message = {}", request.getMessage(), e);
-            sendMessageErrorResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
+            LOGGER.error("Failed to send a message. Message = {}", requestMessage, e);
+            sendErrorSendMessageResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
         }
     }
 
     @Override
-    public void placeOrderMassCancelRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeOrderMassCancelRequestFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
-            LOGGER.debug("placeOrderMassCancelRequestFIX request: {}", request);
-            placeMessageFieldRule(request, responseObserver, "OrderMassCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("OrderMassCancelReport", CheckMetadata.passOn("ClOrdID")), "placeOrderMassCancelRequestFIX");
+            LOGGER.debug("placeOrderMassCancelRequestFIX request: {}", requestMessage);
+
+            String actName = "placeOrderMassCancelRequestFIX";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("OrderMassCancelReport", CheckMetadata.passOn("ClOrdID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "OrderMassCancelRequest",
+                    requestMessage.getFieldsMap().get("ClOrdID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+            if (responseMessage != null) {
+                placeMessageResponseTyped(request, responseObserver, responseMessage, expectedMessages, actName);
+            }
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place an OrderMassCancelRequest. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place an OrderMassCancelRequest. Error: " + e.getMessage());
+            LOGGER.error("Failed to place an OrderMassCancelRequest. Message = {}", requestMessage, e);
+            sendErrorMessageResponse(responseObserver, "Failed to place an OrderMassCancelRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderMassCancelRequestFIX finished");
         }
     }
 
     @Override
-    public void placeQuoteCancelFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeQuoteCancelFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
-            LOGGER.debug("placeQuoteCancelFIX request: {}", request);
-            placeMessageFieldRule(request, responseObserver, "QuoteCancel", request.getMessage().getFieldsMap().get("QuoteMsgID").getSimpleValue(),
-                    ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID")), "placeQuoteCancelFIX");
+            LOGGER.debug("placeQuoteCancelFIX request: {}", requestMessage);
+
+            String actName = "placeQuoteCancelFIX";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("MassQuoteAcknowledgement", CheckMetadata.passOn("QuoteID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "QuoteCancel",
+                    requestMessage.getFieldsMap().get("QuoteMsgID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+            if (responseMessage != null) {
+                placeMessageResponseTyped(request, responseObserver, responseMessage, expectedMessages, actName);
+            }
+
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place a QuoteCancel. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteCancel. Error: " + e.getMessage());
+            LOGGER.error("Failed to place a QuoteCancel. Message = {}", requestMessage, e);
+            sendErrorMessageResponse(responseObserver, "Failed to place a QuoteCancel. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteCancelFIX has finished");
         }
     }
+
     @Override
-    public void placeSecurityStatusRequest(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeSecurityListRequest(PlaceMessageRequestTyped request, StreamObserver<PlaceSecurityListResponse> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("placeSecurityStatusRequest: " + shortDebugString(request));
+                LOGGER.debug("placeSecurityListRequest: " + requestMessage);
             }
-            placeMessageFieldRule(request, responseObserver, "SecurityStatusRequest", request.getMessage().getFieldsMap().get("SecurityID").getSimpleValue(),
+
+            String actName = "placeSecurityListRequest";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("SecurityList", CheckMetadata.passOn("SecurityReqID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "SecurityList",
+                    requestMessage.getFieldsMap().get("SecurityReqID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+
+            if (responseMessage != null) {
+                EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
+                Checkpoint checkpoint = registerCheckPoint(parentId);
+                CheckMetadata checkMetadata = expectedMessages.get(responseMessage.getMetadata().getMessageType());
+
+                responseObserver.onNext(PlaceSecurityListResponse.newBuilder()
+                        .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
+                        .putAllSecurityListDictionary(createSecurityListDictionary(requestMessage))
+                        .setCheckpointId(checkpoint)
+                        .build());
+                responseObserver.onCompleted();
+            }
+            placeMessageFieldRule(request, responseObserver, "SecurityStatusRequest", requestMessage.getFieldsMap().get("SecurityID").getSimpleValue(),
                     ImmutableMap.of("SecurityStatus", CheckMetadata.passOn("SecurityID")), "placeSecurityStatusRequest");
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place an order. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place SecurityStatusRequest. Error: " + e.getMessage());
+            LOGGER.error("Failed to place an order. Message = {}", requestMessage, e);
+            sendErrorSecurityListResponse(responseObserver, "Failed to place SecurityStatusRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeSecurityStatusRequest has finished");
         }
     }
 
+    public Map<Integer, Symbols> createSecurityListDictionary(Message responseMessage) {
+        List<String> securityList = new ArrayList<>();
+        for (Value value : responseMessage.getFieldsMap().get("NoRelatedSym").getListValue().getValuesList()) {
+            securityList.add(value.getMessageValue().getFieldsMap().get("Symbol").getSimpleValue());
+        }
+
+        Map<Integer, Symbols> securityListDictionary = new HashMap<>();
+        for (int i = 0, j = 0; i < securityList.size(); i += 100, j++) {
+            securityListDictionary.put(j, Symbols.newBuilder()
+                    .addAllSymbol(securityList.subList(i, Math.min(i + 100, securityList.size()))).build());
+        }
+        return securityListDictionary;
+    }
+
     @Override
-    public void placeQuoteRequestFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeQuoteRequestFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
-            LOGGER.debug("placeQuoteRequestFIX request: {}", request);
-            placeMessageFieldRule(request, responseObserver, "QuoteRequest", request.getMessage().getFieldsMap().get("QuoteReqID").getSimpleValue(),
-                    ImmutableMap.of("QuoteStatusReport", CheckMetadata.passOn("QuoteReqID")), "placeQuoteRequestFIX");
+            LOGGER.debug("placeQuoteRequestFIX request: {}", requestMessage);
+
+            String actName = "placeQuoteRequestFIX";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("QuoteStatusReport", CheckMetadata.passOn("QuoteReqID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "QuoteRequest",
+                    requestMessage.getFieldsMap().get("QuoteReqID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+            if (responseMessage != null) {
+                placeMessageResponseTyped(request, responseObserver, responseMessage, expectedMessages, actName);
+            }
+
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place a QuoteRequest. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteRequest. Error: " + e.getMessage());
+            LOGGER.error("Failed to place a QuoteRequest. Message = {}", requestMessage, e);
+            sendErrorMessageResponse(responseObserver, "Failed to place a QuoteRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteRequestFIX has finished");
         }
     }
 
     @Override
-    public void placeQuoteResponseFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeQuoteResponseFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
-            LOGGER.debug("placeQuoteResponseFIX request: {}", request);
-            placeMessageFieldRule(request, responseObserver, "QuoteResponse", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("RFQID"), "QuoteStatusReport", CheckMetadata.passOn("RFQID")), "placeQuoteResponseFIX");
+            LOGGER.debug("placeQuoteResponseFIX request: {}", requestMessage);
+
+            String actName = "placeQuoteResponseFIX";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("RFQID"), "QuoteStatusReport", CheckMetadata.passOn("RFQID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "QuoteResponse",
+                    requestMessage.getFieldsMap().get("RFQID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+
+            if (responseMessage != null) {
+                placeMessageResponseTyped(request, responseObserver, responseMessage, expectedMessages, actName);
+            }
+
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place a QuoteResponse. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a QuoteResponse. Error: " + e.getMessage());
+            LOGGER.error("Failed to place a QuoteResponse. Message = {}", requestMessage, e);
+            sendErrorMessageResponse(responseObserver, "Failed to place a QuoteResponse. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteResponseFIX has finished");
         }
     }
 
     @Override
-    public void placeQuoteFIX(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver) {
+    public void placeQuoteFIX(PlaceMessageRequestTyped request, StreamObserver<PlaceMessageMultipleResponseTyped> responseObserver) {
+        Message requestMessage = convertorsRequest.createMessage(request);
         try {
-            LOGGER.debug("placeQuoteFIX request: {}", request);
-            placeMessageFieldRule(request, responseObserver, "Quote", request.getMessage().getFieldsMap().get("RFQID").getSimpleValue(),
-                    ImmutableMap.of("QuoteAck", CheckMetadata.passOn("RFQID")), "placeQuoteFIX");
+            LOGGER.debug("placeQuoteFIX request: {}", requestMessage);
+
+            String actName = "placeQuoteFIX";
+            Map<String, CheckMetadata> expectedMessages = ImmutableMap.of("QuoteAck", CheckMetadata.passOn("RFQID"));
+            Message responseMessage = placeMessageFieldRule(request,
+                    responseObserver,
+                    "Quote",
+                    requestMessage.getFieldsMap().get("RFQID").getSimpleValue(),
+                    expectedMessages,
+                    actName);
+
+            if (responseMessage != null) {
+                EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
+                Checkpoint checkpoint = registerCheckPoint(parentId);
+                CheckMetadata checkMetadata = expectedMessages.get(responseMessage.getMetadata().getMessageType());
+
+                responseObserver.onNext(PlaceMessageMultipleResponseTyped.newBuilder()
+                        .addPlaceMessageResponseTyped(PlaceMessageResponseTyped.newBuilder()
+                                .setResponseMessageTyped(convertorsResponse.createResponseMessage(responseMessage))
+                                .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
+                                .setCheckpointId(checkpoint)).build());
+                responseObserver.onCompleted();
+            }
+
         } catch (RuntimeException | JsonProcessingException e) {
-            LOGGER.error("Failed to place a Quote. Message = {}", request.getMessage(), e);
-            sendErrorResponse(responseObserver, "Failed to place a Quote. Error: " + e.getMessage());
+            LOGGER.error("Failed to place a Quote. Message = {}", requestMessage, e);
+            sendErrorMessageMultipleResponse(responseObserver, "Failed to place a Quote. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeQuoteFIX has finished");
         }
+    }
+
+    private void placeMessageResponseTyped(PlaceMessageRequestTyped request,
+                                           StreamObserver<PlaceMessageResponseTyped> responseObserver,
+                                           Message responseMessage,
+                                           Map<String, CheckMetadata> expectedMessages,
+                                           String actName) throws JsonProcessingException {
+        EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
+        Checkpoint checkpoint = registerCheckPoint(parentId);
+        CheckMetadata checkMetadata = expectedMessages.get(responseMessage.getMetadata().getMessageType());
+
+        responseObserver.onNext(PlaceMessageResponseTyped.newBuilder()
+                .setResponseMessageTyped(convertorsResponse.createResponseMessage(responseMessage))
+                .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
+                .setCheckpointId(checkpoint)
+                .build());
+        responseObserver.onCompleted();
     }
 
     private void checkRequestMessageType(String expectedMessageType, MessageMetadata metadata) {
@@ -260,13 +399,12 @@ public class ActHandler extends ActImplBase {
 
     /**
      *
-     * @param expectedMessages mapping between response and the event status that should be applied in that case
-     * @param noResponseBodySupplier supplier for {@link IBodyData} that will be added to the event in case there is not response received
      * @param receiver supplier for the {@link AbstractMessageReceiver} that will await for the required message
      */
-    private void placeMessage(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-                              String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
-                              NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
+
+    private <T> Message placeMessage(PlaceMessageRequestTyped request, StreamObserver<T> responseObserver,
+                                     String expectedRequestType, Map<String, CheckMetadata> expectedMessages, String actName,
+                                     NoResponseBodySupplier noResponseBodySupplier, ReceiverSupplier receiver) throws JsonProcessingException {
 
         long startPlaceMessage = System.currentTimeMillis();
         Message message = backwardCompatibilityConnectionId(request);
@@ -274,8 +412,6 @@ public class ActHandler extends ActImplBase {
         ConnectionID requestConnId = message.getMetadata().getId().getConnectionId();
 
         EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
-
-        Checkpoint checkpoint = registerCheckPoint(parentId);
 
         MessageResponseMonitor monitor = new MessageResponseMonitor();
         try (AbstractMessageReceiver messageReceiver = receiver.create(monitor, new ReceiverContext(requestConnId, parentId))) {
@@ -289,9 +425,8 @@ public class ActHandler extends ActImplBase {
                     LOGGER.warn("'{}' request cancelled by client", actName);
                     sendErrorResponse(responseObserver, "The request has been cancelled by the client");
                 } else {
-                    processResponseMessage(actName,
+                    return processResponseMessage(actName,
                             responseObserver,
-                            checkpoint,
                             parentId,
                             messageReceiver.getResponseMessage(),
                             expectedMessages,
@@ -308,11 +443,12 @@ public class ActHandler extends ActImplBase {
         } finally {
             LOGGER.debug("placeMessage for {} in {} ms", actName, System.currentTimeMillis() - startPlaceMessage);
         }
+        return null;
     }
 
-    private void placeMessageFieldRule(PlaceMessageRequest request, StreamObserver<PlaceMessageResponse> responseObserver,
-                                       String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
-        placeMessage(request, responseObserver, expectedRequestType, expectedMessages, actName,
+    private <T> Message placeMessageFieldRule(PlaceMessageRequestTyped request, StreamObserver<T> responseObserver,
+                                              String expectedRequestType, String expectedFieldValue, Map<String, CheckMetadata> expectedMessages, String actName) throws JsonProcessingException {
+        return placeMessage(request, responseObserver, expectedRequestType, expectedMessages, actName,
                 () -> Collections.singletonList(createNoResponseBody(expectedMessages, expectedFieldValue)), (monitor, context) -> {
                     Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
                             .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
@@ -321,11 +457,11 @@ public class ActHandler extends ActImplBase {
                 });
     }
 
-    private EventID createAndStoreParentEvent(PlaceMessageRequestOrBuilder request, String actName, Status status) throws JsonProcessingException {
+    private EventID createAndStoreParentEvent(PlaceMessageRequestTypedOrBuilder request, String actName, Status status) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
 
         Event event = start()
-                .name(actName + ' ' + request.getConnectionId().getSessionAlias())
+                .name(actName + ' ' + request.getMetadata().getId().getConnectionId().getSessionAlias())
                 .description(request.getDescription())
                 .type(actName)
                 .status(status)
@@ -352,7 +488,7 @@ public class ActHandler extends ActImplBase {
                 .type("No response found by target keys.")
                 .status(FAILED);
         for (IBodyData data : noResponseBodySupplier.createNoResponseBody()) {
-                errorEvent.bodyData(data);
+            errorEvent.bodyData(data);
         }
         for(MessageID msgID : messageIDList){
             errorEvent.messageID(msgID);
@@ -378,15 +514,14 @@ public class ActHandler extends ActImplBase {
         return treeTableBuilder.build();
     }
 
-    private void processResponseMessage(String actName,
-                                        StreamObserver<PlaceMessageResponse> responseObserver,
-                                        Checkpoint checkpoint,
-                                        EventID parentEventId,
-                                        Message responseMessage,
-                                        Map<String, CheckMetadata> expectedMessages,
-                                        long timeout,
-                                        Collection<MessageID> messageIDList,
-                                        NoResponseBodySupplier noResponseBodySupplier) throws JsonProcessingException {
+    private <T> Message processResponseMessage(String actName,
+                                               StreamObserver<T> responseObserver,
+                                               EventID parentEventId,
+                                               Message responseMessage,
+                                               Map<String, CheckMetadata> expectedMessages,
+                                               long timeout,
+                                               Collection<MessageID> messageIDList,
+                                               NoResponseBodySupplier noResponseBodySupplier) throws JsonProcessingException {
         long startTime = System.currentTimeMillis();
         String message = format("No response message has been received in '%s' ms", timeout);
         if (responseMessage == null) {
@@ -407,19 +542,14 @@ public class ActHandler extends ActImplBase {
                     .messageID(metadata.getId())
                     .toProtoEvent(parentEventId.getId())
             );
-            PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
-                    .setResponseMessage(responseMessage)
-                    .setStatus(RequestStatus.newBuilder().setStatus(checkMetadata.getRequestStatus()).build())
-                    .setCheckpointId(checkpoint)
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+
         }
         LOGGER.debug("processResponseMessage in {} ms", System.currentTimeMillis() - startTime);
+        return responseMessage;
     }
 
-    private boolean isSendPlaceMessage(Message message, StreamObserver<PlaceMessageResponse> responseObserver,
-                                       EventID parentEventId) {
+    private <T> boolean isSendPlaceMessage(Message message, StreamObserver<T> responseObserver,
+                                           EventID parentEventId) {
         long startTime = System.currentTimeMillis();
 
         try {
@@ -456,15 +586,16 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private Message backwardCompatibilityConnectionId(PlaceMessageRequest request) {
-        ConnectionID connectionId = request.getMessage().getMetadata().getId().getConnectionId();
+    private Message backwardCompatibilityConnectionId(PlaceMessageRequestTyped request) {
+        Message requestMessage = convertorsRequest.createMessage(request);
+        ConnectionID connectionId = requestMessage.getMetadata().getId().getConnectionId();
         if (!connectionId.getSessionAlias().isEmpty()) {
-            return request.getMessage();
+            return requestMessage;
         }
-        return Message.newBuilder(request.getMessage())
+        return Message.newBuilder(requestMessage)
                 .mergeMetadata(MessageMetadata.newBuilder()
                         .mergeId(MessageID.newBuilder()
-                                .setConnectionId(request.getConnectionId())
+                                .setConnectionId(connectionId)
                                 .build())
                         .build())
                 .build();
@@ -528,26 +659,66 @@ public class ActHandler extends ActImplBase {
         return new ArrayList<>();
     }
 
-    private void sendErrorResponse(StreamObserver<PlaceMessageResponse> responseObserver,
-                                   String message) {
-        responseObserver.onNext(PlaceMessageResponse.newBuilder()
-                .setStatus(RequestStatus.newBuilder()
-                        .setStatus(ERROR)
-                        .setMessage(message)
-                        .build())
-                .build());
-        responseObserver.onCompleted();
-        LOGGER.debug("Error response : {}", message);
-    }
-
-    private void sendMessageErrorResponse(StreamObserver<SendMessageResponse> responseObserver,
-                                          String message) {
+    private void sendErrorSendMessageResponse(
+            StreamObserver<SendMessageResponse> responseObserver,
+            String message){
         responseObserver.onNext(SendMessageResponse.newBuilder()
                 .setStatus(RequestStatus.newBuilder()
                         .setStatus(ERROR)
                         .setMessage(message)
                         .build())
                 .build());
+    }
+
+    private void sendErrorMessageMultipleResponse(
+            StreamObserver<PlaceMessageMultipleResponseTyped> responseObserver,
+            String message) {
+        responseObserver.onNext(PlaceMessageMultipleResponseTyped.newBuilder().
+                addPlaceMessageResponseTyped(
+                        PlaceMessageResponseTyped.newBuilder()
+                                .setStatus(RequestStatus.newBuilder()
+                                        .setStatus(ERROR)
+                                        .setMessage(message)
+                                        .build())
+                                .build())
+                .build());
+    }
+
+    private void sendErrorSecurityListResponse(
+            StreamObserver<PlaceSecurityListResponse> responseObserver,
+            String message) {
+        responseObserver.onNext(PlaceSecurityListResponse.newBuilder().
+                setStatus(RequestStatus.newBuilder()
+                        .setStatus(ERROR)
+                        .setMessage(message)
+                        .build()
+                ).build());
+    }
+
+    private void sendErrorMessageResponse(
+            StreamObserver<PlaceMessageResponseTyped> responseObserver,
+            String message) {
+        responseObserver.onNext(
+                PlaceMessageResponseTyped.newBuilder().
+                        setStatus(RequestStatus.newBuilder()
+                                .setStatus(ERROR)
+                                .setMessage(message)
+                                .build())
+                        .build());
+    }
+
+    private <T> void sendErrorResponse(
+            StreamObserver<T> responseObserver,
+            String message) {
+        if(responseObserver.getClass().getGenericSuperclass() == SendMessageResponse.class) {
+            sendErrorSendMessageResponse((StreamObserver<SendMessageResponse>) responseObserver, message);
+        } else if(responseObserver.getClass().getGenericSuperclass() == PlaceMessageMultipleResponseTyped.class) {
+            sendErrorMessageMultipleResponse((StreamObserver<PlaceMessageMultipleResponseTyped>) responseObserver, message);
+        } else if(responseObserver.getClass().getGenericSuperclass() == PlaceSecurityListResponse.class) {
+            sendErrorSecurityListResponse((StreamObserver<PlaceSecurityListResponse>) responseObserver, message);
+        } else if(responseObserver.getClass().getGenericSuperclass() == PlaceMessageResponseTyped.class) {
+            sendErrorMessageResponse((StreamObserver<PlaceMessageResponseTyped>) responseObserver, message);
+        }
         responseObserver.onCompleted();
         LOGGER.debug("Error response : {}", message);
     }
