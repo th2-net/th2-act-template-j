@@ -25,6 +25,7 @@ import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.message.sessionAlias
+import com.google.protobuf.TextFormat.shortDebugString
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 
@@ -39,19 +40,18 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeOrderFIX request: $requestMessage")
+        LOGGER.debug("placeOrderFIX request: ${shortDebugString(request)}")
 
-        val parentId = requestMessage.parentEventId
-
-        actionFactory.createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", parentId, 10_000)
+        actionFactory.createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint: Checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -79,14 +79,13 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<SendMessageResponse>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("Sending  message request: $requestMessage")
+        LOGGER.debug("Sending  message request: ${shortDebugString(request)}")
 
-        val parentId = requestMessage.parentEventId
-
-        actionFactory.createAction(responseObserver, "sendMessage", "sendMessage", parentId, 10_000)
+        actionFactory.createAction(responseObserver, "sendMessage", "sendMessage", request.parentEventId, 10_000)
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val response = SendMessageResponse.newBuilder()
@@ -103,25 +102,24 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeOrderMassCancelRequestFIX request: $requestMessage")
-
-        val parentId = requestMessage.parentEventId
+        LOGGER.debug("placeOrderMassCancelRequestFIX request: ${shortDebugString(request)}")
 
         actionFactory.createAction(
             responseObserver,
             "placeOrderMassCancelRequestFIX",
             "placeOrderMassCancelRequestFIX",
-            parentId,
+            request.parentEventId,
             10_000
         )
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -145,19 +143,18 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeQuoteCancelFIX request: {}", requestMessage)
+        LOGGER.debug("placeQuoteCancelFIX request: ${shortDebugString(request)}")
 
-        val parentId = requestMessage.parentEventId
-
-        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", parentId, 10_000)
+        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -181,25 +178,24 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceSecurityListResponse>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeSecurityListRequest: $requestMessage")
-
-        val parentId = requestMessage.parentEventId
+        LOGGER.debug("placeSecurityListRequest: ${shortDebugString(request)}")
 
         actionFactory.createAction(
             responseObserver,
             "placeSecurityListRequest",
             "placeSecurityListRequest",
-            parentId,
+            request.parentEventId,
             10_000
         )
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -226,25 +222,24 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeQuoteRequestFIX request: {}", requestMessage)
-
-        val parentId = requestMessage.parentEventId
+        LOGGER.debug("placeQuoteRequestFIX request: ${shortDebugString(request)}")
 
         actionFactory.createAction(
             responseObserver,
             "placeQuoteRequestFIX",
             "placeQuoteRequestFIX",
-            parentId,
+            request.parentEventId,
             10_000
         )
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -261,7 +256,6 @@ class ActHandlerTyped(
 
                 emitResult(placeMessageResponseTyped)
             }
-
         LOGGER.debug("placeQuoteRequestFIX has finished")
     }
 
@@ -269,25 +263,24 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeQuoteResponseFIX request: {}", requestMessage)
-
-        val parentId = requestMessage.parentEventId
+        LOGGER.debug("placeQuoteResponseFIX request: ${shortDebugString(request)}")
 
         actionFactory.createAction(
             responseObserver,
             "placeQuoteResponseFIX",
             "placeQuoteResponseFIX",
-            parentId,
+            request.parentEventId,
             10_000
         )
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
@@ -307,7 +300,6 @@ class ActHandlerTyped(
 
                 emitResult(placeMessageResponseTyped)
             }
-
         LOGGER.debug("placeQuoteResponseFIX has finished")
     }
 
@@ -315,19 +307,18 @@ class ActHandlerTyped(
         request: PlaceMessageRequestTyped,
         responseObserver: StreamObserver<PlaceMessageMultipleResponseTyped>
     ) {
-        val requestMessage = convertorsRequest.createMessage(request)
-        LOGGER.debug("placeQuoteFIX request: {}", requestMessage)
+        LOGGER.debug("placeQuoteFIX request: ${shortDebugString(request)}")
 
-        val parentId = requestMessage.parentEventId
-
-        actionFactory.createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", parentId, 10_000)
+        actionFactory.createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val checkpoint = registerCheckPoint(parentId)
+                val requestMessage = convertorsRequest.createMessage(request)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
                 send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
