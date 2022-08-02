@@ -23,10 +23,12 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.exactpro.th2.act.core.action.ActionFactory;
+import com.exactpro.th2.act.core.main.ActServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.act.impl.SubscriptionManagerImpl;
+import com.exactpro.th2.act.core.managers.SubscriptionManager;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
@@ -53,26 +55,32 @@ public class ActMain {
             GrpcRouter grpcRouter = factory.getGrpcRouter();
             resources.add(grpcRouter);
 
-            MessageRouter<MessageBatch> messageRouter = factory.getMessageRouterParsedBatch();
-            resources.add(messageRouter);
+            MessageRouter<MessageBatch> messageBatchMessageRouter = factory.getMessageRouterParsedBatch();
+            resources.add(messageBatchMessageRouter);
 
-            SubscriptionManagerImpl subscriptionManager = new SubscriptionManagerImpl();
-            SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
+
+            SubscriptionManager subscriptionManager = new SubscriptionManager();
+            SubscriberMonitor subscriberMonitor = messageBatchMessageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
             resources.add(subscriberMonitor::unsubscribe);
 
-            ActHandler actHandler = new ActHandler(
-                    messageRouter,
-                    subscriptionManager,
-                    factory.getEventBatchRouter(),
+            ActionFactory actionFactory = new ActionFactory(
+                    new com.exactpro.th2.act.core.routers.MessageRouter(messageBatchMessageRouter),
+                    new com.exactpro.th2.act.core.routers.EventRouter(factory.getEventBatchRouter()),
+                    subscriptionManager
+            );
+
+            ActHandlerTyped actHandlerTyped = new ActHandlerTyped(
+                    actionFactory,
                     grpcRouter.getService(Check1Service.class)
             );
-            ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
+
+            ActServer actServer = new ActServer(grpcRouter.startServer(actHandlerTyped));
             resources.add(actServer::stop);
             READINESS_MONITOR.enable();
             LOGGER.info("Act started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {
-            LOGGER.info("The main thread interupted", e);
+            LOGGER.info("The main thread interrupted", e);
         } catch (Exception e) {
             LOGGER.error("Fatal error: {}", e.getMessage(), e);
             System.exit(1);

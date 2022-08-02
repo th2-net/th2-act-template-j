@@ -1,3 +1,19 @@
+/*
+ * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.exactpro.th2.act.convertors
 
 import com.exactpro.th2.act.grpc.*
@@ -24,11 +40,12 @@ class TestConvertorsRequest {
             createPlaceMessageRequestTyped("NewOrderSingle")
                 .setMessageTyped(
                     RequestMessageTyped.newBuilder().setNewOrderSingle(
-                        NewOrderSingle.newBuilder()
-                            .setPrice(1F)
-                            .setOrderQty(1F)
-                            .setSide("Side")
-                            .setTimeInForce("TimeInForce")
+                        NewOrderSingle.newBuilder().apply {
+                            price = 1F
+                            orderQty = 1F
+                            side = "Side"
+                            timeInForce = "TimeInForce"
+                        }
                     )
                 ).build()
 
@@ -53,19 +70,20 @@ class TestConvertorsRequest {
             createPlaceMessageRequestTyped("Quote")
                 .setMessageTyped(
                     RequestMessageTyped.newBuilder().setQuote(
-                        Quote.newBuilder()
-                            .addNoQuoteQualifiers(
+                        Quote.newBuilder().apply {
+                            addNoQuoteQualifiers(
                                 Quote.QuoteQualifier.newBuilder().setQuoteQualifier("NoQuoteQualifiers")
                             )
-                            .setOfferPx(1F)
-                            .setOfferSize(1F)
-                            .setQuoteId("QuoteID")
-                            .setSymbol("Symbol")
-                            .setSecurityIdSource("SecurityIDSource")
-                            .setBidSize("BidSize")
-                            .setBidPx(1F)
-                            .setSecurityId("SecurityID")
-                            .setQuoteType(1)
+                            offerPx = 1F
+                            offerSize = 1F
+                            quoteId = "QuoteID"
+                            symbol = "Symbol"
+                            securityIdSource = "SecurityIDSource"
+                            bidSize = "BidSize"
+                            bidPx = 1F
+                            securityId = "SecurityID"
+                            quoteType = 1
+                        }
                     )
                 ).build()
 
@@ -97,9 +115,10 @@ class TestConvertorsRequest {
             createPlaceMessageRequestTyped("SecurityListRequest")
                 .setMessageTyped(
                     RequestMessageTyped.newBuilder().setSecurityListRequest(
-                        SecurityListRequest.newBuilder()
-                            .setSecurityListRequestType(1)
-                            .setSecurityReqId("SecurityReqID")
+                        SecurityListRequest.newBuilder().apply {
+                            securityListRequestType = 1
+                            securityReqId = "SecurityReqID"
+                        }
                     )
                 ).build()
 
