@@ -25,6 +25,7 @@ import com.exactpro.th2.check1.grpc.Check1Service
 import com.exactpro.th2.check1.grpc.CheckpointRequest
 import com.exactpro.th2.check1.grpc.CheckpointResponse
 import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.message.sessionAlias
 import com.google.protobuf.TextFormat
@@ -51,7 +52,11 @@ class ActHandlerTyped(
 
         actionFactory.apply {
             createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", parentId, 10_000)
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -123,7 +128,11 @@ class ActHandlerTyped(
                 parentId,
                 10_000
             )
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -158,7 +167,11 @@ class ActHandlerTyped(
 
         actionFactory.apply {
             createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", parentId, 10_000)
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -199,7 +212,11 @@ class ActHandlerTyped(
                 parentId,
                 10_000
             )
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -243,7 +260,11 @@ class ActHandlerTyped(
                 parentId,
                 10_000
             )
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -284,7 +305,11 @@ class ActHandlerTyped(
                 parentId,
                 10_000
             )
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -322,7 +347,11 @@ class ActHandlerTyped(
 
         actionFactory.apply {
             createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", parentId, 10_000)
-                .preFilter { msg -> msg.messageType != "Heartbeat" }
+                .preFilter { msg ->
+                    msg.messageType != "Heartbeat"
+                            && msg.sessionAlias == requestMessage.sessionAlias
+                            && msg.direction == Direction.FIRST
+                }
                 .execute {
                     send(requestMessage, requestMessage.sessionAlias, 1_000)
 
@@ -360,18 +389,18 @@ class ActHandlerTyped(
         val securityList: MutableList<String> = ArrayList()
         val noRelatedSym = responseMessage.fieldsMap["NoRelatedSym"]
         if (noRelatedSym != null) {
-            for (value in noRelatedSym.listValue.valuesList) {
-                val symbol = value.messageValue.fieldsMap["Symbol"]
+            noRelatedSym.listValue.valuesList.forEach {
+                val symbol = it.messageValue.fieldsMap["Symbol"]
                 if (symbol != null) {
                     securityList.add(symbol.simpleValue)
                 }
             }
             val securityListDictionary = mutableMapOf<Int, Symbols>()
-            var end = 0
-            while (end < securityList.size) {
-                securityListDictionary[end / 100] = Symbols.newBuilder()
-                    .addAllSymbol(securityList.subList(end, (end + 100).coerceAtMost(securityList.size))).build()
-                end += 100
+            for (i in 0 until securityList.size step 100) {
+                securityListDictionary[i / 100] =
+                    Symbols.newBuilder().addAllSymbol(
+                        securityList.subList(i, (i + 100).coerceAtMost(securityList.size))
+                    ).build()
             }
             return securityListDictionary
         }
