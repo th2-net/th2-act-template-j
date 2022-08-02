@@ -58,7 +58,6 @@ public class ActMain {
             MessageRouter<MessageBatch> messageBatchMessageRouter = factory.getMessageRouterParsedBatch();
             resources.add(messageBatchMessageRouter);
 
-
             SubscriptionManager subscriptionManager = new SubscriptionManager();
             SubscriberMonitor subscriberMonitor = messageBatchMessageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
             resources.add(subscriberMonitor::unsubscribe);
@@ -66,12 +65,12 @@ public class ActMain {
             ActionFactory actionFactory = new ActionFactory(
                     new com.exactpro.th2.act.core.routers.MessageRouter(messageBatchMessageRouter),
                     new com.exactpro.th2.act.core.routers.EventRouter(factory.getEventBatchRouter()),
-                    subscriptionManager
+                    subscriptionManager,
+                    grpcRouter.getService(Check1Service.class)
             );
 
             ActHandlerTyped actHandlerTyped = new ActHandlerTyped(
-                    actionFactory,
-                    grpcRouter.getService(Check1Service.class)
+                    actionFactory
             );
 
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandlerTyped));

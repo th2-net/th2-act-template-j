@@ -21,20 +21,15 @@ import com.exactpro.th2.act.convertors.ConvertorsResponse
 import com.exactpro.th2.act.core.action.ActionFactory
 import com.exactpro.th2.act.grpc.*
 import com.exactpro.th2.act.grpc.ActTypedGrpc.ActTypedImplBase
-import com.exactpro.th2.check1.grpc.Check1Service
-import com.exactpro.th2.check1.grpc.CheckpointRequest
-import com.exactpro.th2.check1.grpc.CheckpointResponse
 import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.message.sessionAlias
-import com.google.protobuf.TextFormat
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 
 class ActHandlerTyped(
-    private val actionFactory: ActionFactory,
-    private val check1Service: Check1Service
+    private val actionFactory: ActionFactory
 ) : ActTypedImplBase() {
 
     private val convertorsRequest = ConvertorsRequest()
@@ -48,38 +43,35 @@ class ActHandlerTyped(
         LOGGER.debug("placeOrderFIX request: $requestMessage")
 
         val parentId = requestMessage.parentEventId
-        val checkpoint: Checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", parentId, 10_000)
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", parentId, 10_000)
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint: Checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("ExecutionReport") {
-                            fieldsMap["ClOrdID"] == requestMessage.fieldsMap["ClOrdID"]
-                        }
-                        failOn("BusinessMessageReject") {
-                            fieldsMap["BusinessRejectRefID"] == requestMessage.fieldsMap["ClOrdID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("ExecutionReport") {
+                        fieldsMap["ClOrdID"] == requestMessage.fieldsMap["ClOrdID"]
                     }
-
-                    val placeMessageResponseTyped: PlaceMessageResponseTyped =
-                        PlaceMessageResponseTyped.newBuilder()
-                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                            .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                            .setCheckpointId(checkpoint)
-                            .build()
-
-                    emitResult(placeMessageResponseTyped)
-                    responseObserver.onCompleted()
+                    failOn("BusinessMessageReject") {
+                        fieldsMap["BusinessRejectRefID"] == requestMessage.fieldsMap["ClOrdID"]
+                    }
                 }
-        }
+
+                val placeMessageResponseTyped: PlaceMessageResponseTyped =
+                    PlaceMessageResponseTyped.newBuilder()
+                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                        .setCheckpointId(checkpoint)
+                        .build()
+
+                emitResult(placeMessageResponseTyped)
+            }
         LOGGER.debug("placeOrderFIX has finished")
     }
 
@@ -91,22 +83,19 @@ class ActHandlerTyped(
         LOGGER.debug("Sending  message request: $requestMessage")
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(responseObserver, "sendMessage", "sendMessage", parentId, 10_000)
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(responseObserver, "sendMessage", "sendMessage", parentId, 10_000)
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val response = SendMessageResponse.newBuilder()
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-                        .build()
+                val response = SendMessageResponse.newBuilder()
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+                    .build()
 
-                    emitResult(response)
-                    responseObserver.onCompleted()
-                }
-        }
+                emitResult(response)
+            }
         LOGGER.debug("Sending the message has been finished")
     }
 
@@ -118,40 +107,37 @@ class ActHandlerTyped(
         LOGGER.debug("placeOrderMassCancelRequestFIX request: $requestMessage")
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(
-                responseObserver,
-                "placeOrderMassCancelRequestFIX",
-                "placeOrderMassCancelRequestFIX",
-                parentId,
-                10_000
-            )
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(
+            responseObserver,
+            "placeOrderMassCancelRequestFIX",
+            "placeOrderMassCancelRequestFIX",
+            parentId,
+            10_000
+        )
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("OrderMassCancelReport") {
-                            fieldsMap["ClOrdID"] == requestMessage.fieldsMap["ClOrdID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("OrderMassCancelReport") {
+                        fieldsMap["ClOrdID"] == requestMessage.fieldsMap["ClOrdID"]
                     }
-
-                    val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-                        .build()
-
-                    emitResult(placeMessageResponseTyped)
-                    responseObserver.onCompleted()
                 }
-        }
+
+                val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+                    .build()
+
+                emitResult(placeMessageResponseTyped)
+            }
         LOGGER.debug("placeOrderMassCancelRequestFIX finished")
     }
 
@@ -163,34 +149,31 @@ class ActHandlerTyped(
         LOGGER.debug("placeQuoteCancelFIX request: {}", requestMessage)
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", parentId, 10_000)
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", parentId, 10_000)
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("MassQuoteAcknowledgement") {
-                            fieldsMap["QuoteID"] == requestMessage.fieldsMap["QuoteMsgID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("MassQuoteAcknowledgement") {
+                        fieldsMap["QuoteID"] == requestMessage.fieldsMap["QuoteMsgID"]
                     }
-
-                    val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-                        .build()
-
-                    emitResult(placeMessageResponseTyped)
-                    responseObserver.onCompleted()
                 }
-        }
+
+                val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+                    .build()
+
+                emitResult(placeMessageResponseTyped)
+            }
         LOGGER.debug("placeQuoteCancelFIX has finished")
     }
 
@@ -202,43 +185,40 @@ class ActHandlerTyped(
         LOGGER.debug("placeSecurityListRequest: $requestMessage")
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(
-                responseObserver,
-                "placeSecurityListRequest",
-                "placeSecurityListRequest",
-                parentId,
-                10_000
-            )
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(
+            responseObserver,
+            "placeSecurityListRequest",
+            "placeSecurityListRequest",
+            parentId,
+            10_000
+        )
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("SecurityStatus") {
-                            fieldsMap["SecurityID"] == requestMessage.fieldsMap["SecurityID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("SecurityStatus") {
+                        fieldsMap["SecurityID"] == requestMessage.fieldsMap["SecurityID"]
                     }
-
-                    val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-
-                    val securityListDictionary = createSecurityListDictionary(receiveMessage)
-                    if (securityListDictionary.isNotEmpty()) {
-                        placeSecurityListResponse.putAllSecurityListDictionary(securityListDictionary)
-                    }
-
-                    emitResult(placeSecurityListResponse.build())
-                    responseObserver.onCompleted()
                 }
-        }
+
+                val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+
+                val securityListDictionary = createSecurityListDictionary(receiveMessage)
+                if (securityListDictionary.isNotEmpty()) {
+                    placeSecurityListResponse.putAllSecurityListDictionary(securityListDictionary)
+                }
+
+                emitResult(placeSecurityListResponse.build())
+            }
         LOGGER.debug("placeSecurityStatusRequest has finished")
     }
 
@@ -250,40 +230,38 @@ class ActHandlerTyped(
         LOGGER.debug("placeQuoteRequestFIX request: {}", requestMessage)
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(
-                responseObserver,
-                "placeQuoteRequestFIX",
-                "placeQuoteRequestFIX",
-                parentId,
-                10_000
-            )
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(
+            responseObserver,
+            "placeQuoteRequestFIX",
+            "placeQuoteRequestFIX",
+            parentId,
+            10_000
+        )
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("QuoteStatusReport") {
-                            fieldsMap["QuoteReqID"] == requestMessage.fieldsMap["QuoteReqID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("QuoteStatusReport") {
+                        fieldsMap["QuoteReqID"] == requestMessage.fieldsMap["QuoteReqID"]
                     }
-
-                    val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-                        .build()
-
-                    emitResult(placeMessageResponseTyped)
-                    responseObserver.onCompleted()
                 }
-        }
+
+                val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+                    .build()
+
+                emitResult(placeMessageResponseTyped)
+            }
+
         LOGGER.debug("placeQuoteRequestFIX has finished")
     }
 
@@ -295,43 +273,41 @@ class ActHandlerTyped(
         LOGGER.debug("placeQuoteResponseFIX request: {}", requestMessage)
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(
-                responseObserver,
-                "placeQuoteResponseFIX",
-                "placeQuoteResponseFIX",
-                parentId,
-                10_000
-            )
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(
+            responseObserver,
+            "placeQuoteResponseFIX",
+            "placeQuoteResponseFIX",
+            parentId,
+            10_000
+        )
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("ExecutionReport") {
-                            fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
-                        }
-                        passOn("QuoteStatusReport") {
-                            fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("ExecutionReport") {
+                        fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
                     }
-
-                    val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint)
-                        .build()
-
-                    emitResult(placeMessageResponseTyped)
-                    responseObserver.onCompleted()
+                    passOn("QuoteStatusReport") {
+                        fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
+                    }
                 }
-        }
+
+                val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                    .setCheckpointId(checkpoint)
+                    .build()
+
+                emitResult(placeMessageResponseTyped)
+            }
+
         LOGGER.debug("placeQuoteResponseFIX has finished")
     }
 
@@ -343,46 +319,34 @@ class ActHandlerTyped(
         LOGGER.debug("placeQuoteFIX request: {}", requestMessage)
 
         val parentId = requestMessage.parentEventId
-        val checkpoint = registerCheckPoint(parentId)
 
-        actionFactory.apply {
-            createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", parentId, 10_000)
-                .preFilter { msg ->
-                    msg.messageType != "Heartbeat"
-                            && msg.sessionAlias == requestMessage.sessionAlias
-                            && msg.direction == Direction.FIRST
-                }
-                .execute {
-                    send(requestMessage, requestMessage.sessionAlias, 1_000)
+        actionFactory.createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", parentId, 10_000)
+            .preFilter { msg ->
+                msg.messageType != "Heartbeat"
+                        && msg.sessionAlias == requestMessage.sessionAlias
+                        && msg.direction == Direction.FIRST
+            }
+            .execute {
+                val checkpoint = registerCheckPoint(parentId)
+                send(requestMessage, requestMessage.sessionAlias)
 
-                    val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("QuoteAck") {
-                            fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
-                        }
+                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("QuoteAck") {
+                        fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
                     }
-
-                    val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
-                        .addPlaceMessageResponseTyped(
-                            PlaceMessageResponseTyped.newBuilder()
-                                .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
-                                .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                                .setCheckpointId(checkpoint)
-                        ).build()
-
-                    emitResult(placeMessageMultipleResponseTyped)
-                    responseObserver.onCompleted()
                 }
-        }
-        LOGGER.debug("placeQuoteFIX has finished")
-    }
 
-    private fun registerCheckPoint(parentEventId: EventID): Checkpoint {
-        LOGGER.debug("Registering the checkpoint started")
-        val response: CheckpointResponse = check1Service.createCheckpoint(
-            CheckpointRequest.newBuilder().setParentEventId(parentEventId).build()
-        )
-        LOGGER.debug("Registering the checkpoint ended. Response " + TextFormat.shortDebugString(response))
-        return response.checkpoint
+                val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
+                    .addPlaceMessageResponseTyped(
+                        PlaceMessageResponseTyped.newBuilder()
+                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                            .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                            .setCheckpointId(checkpoint)
+                    ).build()
+
+                emitResult(placeMessageMultipleResponseTyped)
+            }
+        LOGGER.debug("placeQuoteFIX has finished")
     }
 
     private fun createSecurityListDictionary(responseMessage: Message): Map<Int, Symbols> {
