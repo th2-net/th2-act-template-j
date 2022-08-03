@@ -27,7 +27,7 @@ import strikt.api.expect
 import strikt.assertions.isEqualTo
 
 class TestConvertorsResponse {
-    private val convertorsResponse = ConvertorsResponse()
+    val convertorsResponse = ConvertorsResponse()
 
     @Test
     fun `convert BusinessMessageReject`() {

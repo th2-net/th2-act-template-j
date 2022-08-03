@@ -30,9 +30,9 @@ import strikt.assertions.isEqualTo
 import strikt.assertions.isNotEqualTo
 
 class TestConvertorsRequest {
-    private val convertorsRequest: ConvertorsRequest = ConvertorsRequest()
-    private val connectionID = ConnectionID.newBuilder().setSessionAlias("sessionAlias").build()
-    private val parentEventID = EventID.newBuilder().setId("parentEventId").build()
+    val convertorsRequest: ConvertorsRequest = ConvertorsRequest()
+    val connectionID = ConnectionID.newBuilder().setSessionAlias("sessionAlias").build()
+    val parentEventID = EventID.newBuilder().setId("parentEventId").build()
 
     @Test
     fun `convert NewOrderSingle`() {
@@ -136,7 +136,7 @@ class TestConvertorsRequest {
         }
     }
 
-    private fun createPlaceMessageRequestTyped(messageType: String): PlaceMessageRequestTyped.Builder {
+    fun createPlaceMessageRequestTyped(messageType: String): PlaceMessageRequestTyped.Builder {
         return PlaceMessageRequestTyped.newBuilder()
             .setParentEventId(parentEventID)
             .setMetadata(
