@@ -57,11 +57,15 @@ class ConvertorsRequest {
     private fun createNewOrderSingle(requestTyped: PlaceMessageRequestTyped): Message {
         val newOrderSingle = requestTyped.messageTyped.newOrderSingle
         return messageBuilder(requestTyped).putAllFields(
-
             mutableMapOf(
-                "SecurityID" to newOrderSingle.securityId.toValue(),
-                "SecurityIDSource" to newOrderSingle.securityIdSource.toValue(),
-                "OrdType" to newOrderSingle.ordType.toValue(),
+                "Instrument" to  Message.newBuilder()
+                    .putAllFields(
+                        mutableMapOf(
+                            "SecurityID" to newOrderSingle.securityId.toValue(),
+                            "SecurityIDSource" to newOrderSingle.securityIdSource.toValue(),
+                            "OrdType" to newOrderSingle.ordType.toValue(),
+                        )
+                    ).toValue(),
                 "AccountType" to newOrderSingle.accountType.toValue(),
                 "OrderCapacity" to newOrderSingle.orderCapacity.toValue(),
                 "OrderQty" to newOrderSingle.orderQty.toValue(),
