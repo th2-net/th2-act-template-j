@@ -65,9 +65,6 @@ class TestConvertorsRequest {
             that("NewOrderSingle").isEqualTo(requestMsg.messageType)
             that(connectionID).isEqualTo(requestMsg.metadata.id.connectionId)
 
-            that(expendedMsg.securityId).isEqualTo(requestMsg["SecurityID"]!!.simpleValue)
-            that(expendedMsg.securityIdSource).isEqualTo(requestMsg["SecurityIDSource"]!!.simpleValue)
-            that(expendedMsg.ordType).isEqualTo(requestMsg["OrdType"]!!.simpleValue)
             that(expendedMsg.accountType.toString()).isEqualTo(requestMsg["AccountType"]!!.simpleValue)
             that(expendedMsg.orderCapacity).isEqualTo(requestMsg["OrderCapacity"]!!.simpleValue)
             that(expendedMsg.orderQty.toString()).isEqualTo(requestMsg["OrderQty"]!!.simpleValue)
