@@ -21,6 +21,7 @@ import com.exactpro.th2.act.grpc.NoPartyIDs
 import com.exactpro.th2.act.grpc.Quote.QuoteQualifier
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.Value
+import com.exactpro.th2.common.value.toValue
 import com.google.protobuf.TextFormat
 import org.slf4j.LoggerFactory
 
@@ -56,8 +57,9 @@ class ConvertorsResponse {
 
     private fun createExecutionReport(message: Message): ResponseMessageTyped {
         val executionReport = ExecutionReport.newBuilder().apply {
-            securityId = field(message, "SecurityID")
-            securityIdSource = field(message, "SecurityIDSource")
+            val instrument = field(message, "Instrument").toValue().messageValue
+            securityId = field(instrument, "SecurityID")
+            securityIdSource = field(instrument, "SecurityIDSource")
             ordType = field(message, "OrdType")
             accountType = field(message, "AccountType").toInt()
             orderCapacity = field(message, "OrderCapacity")
