@@ -61,11 +61,12 @@ class ConvertorsRequest {
                 "Instrument" to  Message.newBuilder()
                     .putAllFields(
                         mutableMapOf(
+                            "Symbol" to newOrderSingle.symbol.toValue(),
                             "SecurityID" to newOrderSingle.securityId.toValue(),
                             "SecurityIDSource" to newOrderSingle.securityIdSource.toValue(),
-                            "OrdType" to newOrderSingle.ordType.toValue(),
                         )
                     ).toValue(),
+                "OrdType" to newOrderSingle.ordType.toValue(),
                 "AccountType" to newOrderSingle.accountType.toValue(),
                 "OrderCapacity" to newOrderSingle.orderCapacity.toValue(),
                 "OrderQty" to newOrderSingle.orderQty.toValue(),
@@ -78,7 +79,6 @@ class ConvertorsRequest {
                 "TransactTime" to newOrderSingle.transactTime.toValue(),
                 "TradingParty" to Message.newBuilder().putFields("NoPartyIDs",
                             createNoPartyIdsFields(newOrderSingle.tradingParty.noPartyIdsList).toValue()).toValue(),
-                "Symbol" to newOrderSingle.symbol.toValue()
             )
         ).build()
     }
