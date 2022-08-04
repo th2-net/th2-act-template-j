@@ -60,7 +60,6 @@ class ConvertorsResponse {
             accountType = field(message, "AccountType").toInt()
             clOrdId = field(message, "ClOrdID")
             orderCapacity = field(message, "OrderCapacity")
-            orderQty = field(message, "OrderQty").toFloat()
             leavesQty = field(message, "LeavesQty").toFloat()
             side = field(message, "Side")
             cumQty = field(message, "CumQty").toFloat()
@@ -72,10 +71,9 @@ class ConvertorsResponse {
             text = field(message, "Text")
             timeInForce = field(message, "TimeInForce")
             transactTime = field(message, "TransactTime")
-            lastPx = field(message, "LastPx").toFloat()
         }
 
-        val headerFields = message.fieldsMap["Header"]
+        val headerFields = message.fieldsMap["header"]
         if (headerFields != null) {
             val headerField = headerFields.messageValue
 
