@@ -57,13 +57,9 @@ class ConvertorsResponse {
 
     private fun createExecutionReport(message: Message): ResponseMessageTyped {
         val executionReport = ExecutionReport.newBuilder().apply {
-            val instrument = field(message, "Instrument").toValue().messageValue
-            securityId = field(instrument, "SecurityID")
-            securityIdSource = field(instrument, "SecurityIDSource")
-            ordType = field(message, "OrdType")
             accountType = field(message, "AccountType").toInt()
-            orderCapacity = field(message, "OrderCapacity")
             clOrdId = field(message, "ClOrdID")
+            orderCapacity = field(message, "OrderCapacity")
             orderQty = field(message, "OrderQty").toFloat()
             leavesQty = field(message, "LeavesQty").toFloat()
             side = field(message, "Side")
