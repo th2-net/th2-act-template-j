@@ -65,7 +65,7 @@ class ActHandlerTyped(
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped =
                     PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                         .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                         .setCheckpointId(checkpoint)
                         .build()
@@ -129,7 +129,7 @@ class ActHandlerTyped(
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                    .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                     .setCheckpointId(checkpoint)
                     .build()
@@ -164,7 +164,7 @@ class ActHandlerTyped(
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                    .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                     .setCheckpointId(checkpoint)
                     .build()
@@ -249,7 +249,7 @@ class ActHandlerTyped(
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                    .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                     .setCheckpointId(checkpoint)
                     .build()
@@ -293,7 +293,7 @@ class ActHandlerTyped(
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped = PlaceMessageResponseTyped.newBuilder()
-                    .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                    .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                     .setCheckpointId(checkpoint)
                     .build()
@@ -305,7 +305,7 @@ class ActHandlerTyped(
 
     override fun placeQuoteFIX(
         request: PlaceMessageRequestTyped,
-        responseObserver: StreamObserver<PlaceMessageMultiResponseTyped>
+        responseObserver: StreamObserver<PlaceMessageMultipleResponseTyped>
     ) {
         LOGGER.debug("placeQuoteFIX request: ${shortDebugString(request)}")
 
@@ -327,10 +327,10 @@ class ActHandlerTyped(
                     }
                 }
 
-                val placeMessageMultipleResponseTyped = PlaceMessageMultiResponseTyped.newBuilder()
+                val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
                     .addPlaceMessageResponseTyped(
                         PlaceMessageResponseTyped.newBuilder()
-                            .setResponseMessage(convertorsResponse.createResponseMessage(receiveMessage))
+                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
                             .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                             .setCheckpointId(checkpoint)
                     ).build()

@@ -29,6 +29,8 @@ class ConvertorsResponse {
     fun createResponseMessage(message: Message): ResponseMessageTyped {
         val responseMessageTyped: ResponseMessageTyped =
             when (val messageType = message.metadata.messageType) {
+                "BusinessMessageReject" -> createBusinessMessageReject(message)
+                "ExecutionReport" -> createExecutionReport(message)
                 "QuoteStatusReport" -> createQuoteStatusReport(message)
                 "Quote" -> createQuote(message)
                 "QuoteAck" -> createQuoteAck(message)
@@ -39,7 +41,7 @@ class ConvertorsResponse {
         return responseMessageTyped
     }
 
-    /*private fun createBusinessMessageReject(message: Message): ResponseMessageTyped {
+    private fun createBusinessMessageReject(message: Message): ResponseMessageTyped {
         val businessMessageReject = BusinessMessageReject.newBuilder().apply {
             refMsgType = field(message, "RefMsgType")
             businessRejectReason = field(message, "BusinessRejectReason").toInt()
@@ -94,7 +96,7 @@ class ConvertorsResponse {
 
         return ResponseMessageTyped.newBuilder()
             .setExecutionReport(executionReport).build()
-    }*/
+    }
 
     private fun createQuoteStatusReport(message: Message): ResponseMessageTyped {
         val quoteStatusReport = QuoteStatusReport.newBuilder().apply {
