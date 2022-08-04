@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.act.convertors
 
-import com.exactpro.th2.act.grpc.Header
 import com.exactpro.th2.act.grpc.Quote
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageMetadata
@@ -29,7 +28,7 @@ import strikt.assertions.isEqualTo
 class TestConvertorsResponse {
     val convertorsResponse = ConvertorsResponse()
 
-    @Test
+   /* @Test
     fun `convert BusinessMessageReject`() {
         val message = Message.newBuilder()
             .setMetadata(MessageMetadata.newBuilder().setMessageType("BusinessMessageReject"))
@@ -130,7 +129,7 @@ class TestConvertorsResponse {
             that(message.getField("LastPx")).isEqualTo(responseMessageTyped.lastPx.toValue())
         }
     }
-
+*/
     @Test
     fun `convert QuoteStatusReport`() {
         val message = Message.newBuilder()
@@ -160,19 +159,11 @@ class TestConvertorsResponse {
 
     @Test
     fun `convert Quote`() {
-        val quoteQualifier = mutableListOf<Message>()
-        for (partyRole in 0..2) {
-            quoteQualifier.add(
-                Message.newBuilder()
-                    .putFields("QuoteQualifier", "QuoteQualifier".toValue()).build()
-            )
-        }
-
         val message = Message.newBuilder()
             .setMetadata(MessageMetadata.newBuilder().setMessageType("Quote"))
             .putAllFields(
                 mapOf(
-                    "NoQuoteQualifiers" to quoteQualifier.toValue(),
+                    "NoQuoteQualifiers" to quoteQualifierList(2).toValue(),
                     "OfferPx" to 1.0F.toValue(),
                     "OfferSize" to 1.0F.toValue(),
                     "QuoteID" to "QuoteID".toValue(),
@@ -181,6 +172,7 @@ class TestConvertorsResponse {
                     "BidSize" to "BidSize".toValue(),
                     "BidPx" to 1.0F.toValue(),
                     "SecurityID" to "SecurityID".toValue(),
+                    "NoPartyIDs" to noPartyIDsList(2).toValue(),
                     "QuoteType" to 1.toValue()
                 )
             ).build()

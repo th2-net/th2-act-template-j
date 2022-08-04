@@ -17,17 +17,18 @@
 package com.exactpro.th2.act.convertors
 
 import com.exactpro.th2.act.grpc.*
+import com.exactpro.th2.act.grpc.NoPartyIDs
 import com.exactpro.th2.act.grpc.Quote.QuoteQualifier
 import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.Value
 import com.google.protobuf.TextFormat
 import org.slf4j.LoggerFactory
+
 
 class ConvertorsResponse {
     fun createResponseMessage(message: Message): ResponseMessageTyped {
         val responseMessageTyped: ResponseMessageTyped =
             when (val messageType = message.metadata.messageType) {
-                "BusinessMessageReject" -> createBusinessMessageReject(message)
-                "ExecutionReport" -> createExecutionReport(message)
                 "QuoteStatusReport" -> createQuoteStatusReport(message)
                 "Quote" -> createQuote(message)
                 "QuoteAck" -> createQuoteAck(message)
@@ -38,7 +39,7 @@ class ConvertorsResponse {
         return responseMessageTyped
     }
 
-    private fun createBusinessMessageReject(message: Message): ResponseMessageTyped {
+    /*private fun createBusinessMessageReject(message: Message): ResponseMessageTyped {
         val businessMessageReject = BusinessMessageReject.newBuilder().apply {
             refMsgType = field(message, "RefMsgType")
             businessRejectReason = field(message, "BusinessRejectReason").toInt()
@@ -93,7 +94,7 @@ class ConvertorsResponse {
 
         return ResponseMessageTyped.newBuilder()
             .setExecutionReport(executionReport).build()
-    }
+    }*/
 
     private fun createQuoteStatusReport(message: Message): ResponseMessageTyped {
         val quoteStatusReport = QuoteStatusReport.newBuilder().apply {
@@ -120,6 +121,7 @@ class ConvertorsResponse {
             bidSize = field(message, "BidSize")
             bidPx = field(message, "BidPx").toFloat()
             securityId = field(message, "SecurityID")
+            addAllNoPartyIds(createNoPartyIDs(message))
             quoteType = field(message, "QuoteType").toInt()
         }
         return ResponseMessageTyped.newBuilder()
@@ -162,7 +164,6 @@ class ConvertorsResponse {
             throw npe
         }
 
-
     private fun createQuoteQualifier(message: Message): List<QuoteQualifier> {
         val quoteQualifiers: MutableList<QuoteQualifier> = ArrayList()
         val noQuoteQualifiers = message.fieldsMap["NoQuoteQualifiers"]
@@ -175,6 +176,21 @@ class ConvertorsResponse {
             }
         }
         return quoteQualifiers
+    }
+
+    fun createNoPartyIDs(message: Message): List<NoPartyIDs>{
+        val msgNoPartyIDs: List<Value> = message.fieldsMap["NoPartyIDs"]!!.listValue.valuesList
+        val noPartyIDs: MutableList<NoPartyIDs> = ArrayList()
+        for (value in msgNoPartyIDs) {
+            val msg: Message = value.messageValue
+            noPartyIDs.add(
+                NoPartyIDs.newBuilder()
+                    .setPartyId(field(msg, "PartyID"))
+                    .setPartyIdSource(field(msg, "PartyIDSource"))
+                    .setPartyRole(field(msg, "PartyRole").toInt()).build()
+            )
+        }
+        return noPartyIDs
     }
 
     companion object {

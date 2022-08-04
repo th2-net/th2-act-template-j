@@ -16,14 +16,14 @@
 
 package com.exactpro.th2.act.convertors
 
+import com.exactpro.th2.act.grpc.NoPartyIDs
 import com.exactpro.th2.act.grpc.PlaceMessageRequestTyped
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.MessageMetadata
 import com.exactpro.th2.common.value.toValue
-import com.google.protobuf.TextFormat.shortDebugString
-import org.slf4j.LoggerFactory
+
 
 class ConvertorsRequest {
     fun createMessage(requestTyped: PlaceMessageRequestTyped): Message {
@@ -56,19 +56,27 @@ class ConvertorsRequest {
 
     private fun createNewOrderSingle(requestTyped: PlaceMessageRequestTyped): Message {
         val newOrderSingle = requestTyped.messageTyped.newOrderSingle
-        val newOrderSingleMessage = messageBuilder(requestTyped)
-        if (newOrderSingle.side != "") newOrderSingleMessage.putFields("Side", newOrderSingle.side.toValue())
-        if (newOrderSingle.timeInForce != "") newOrderSingleMessage.putFields("TimeInForce", newOrderSingle.timeInForce.toValue())
-        if (newOrderSingle.userId != "") newOrderSingleMessage.putFields("UserID", newOrderSingle.userId.toValue())
-        if (newOrderSingle.instrument != "") newOrderSingleMessage.putFields("Instrument", newOrderSingle.instrument.toValue())
-        newOrderSingleMessage.putAllFields(
+        return messageBuilder(requestTyped).putAllFields(
+
             mutableMapOf(
+                "SecurityID" to newOrderSingle.securityId.toValue(),
+                "SecurityIDSource" to newOrderSingle.securityIdSource.toValue(),
+                "OrdType" to newOrderSingle.ordType.toValue(),
+                "AccountType" to newOrderSingle.accountType.toValue(),
+                "OrderCapacity" to newOrderSingle.orderCapacity.toValue(),
+                "OrderQty" to newOrderSingle.orderQty.toValue(),
+                "DisplayQty" to newOrderSingle.displayQty.toValue(),
                 "Price" to newOrderSingle.price.toValue(),
-                "OrderQty" to newOrderSingle.orderQty.toValue()
+                "ClOrdID" to newOrderSingle.clOrdId.toValue(),
+                "SecondaryClOrdID" to newOrderSingle.secondaryClOrdId.toValue(),
+                "Side" to newOrderSingle.side.toValue(),
+                "TimeInForce" to newOrderSingle.timeInForce.toValue(),
+                "TransactTime" to newOrderSingle.transactTime.toValue(),
+                "TradingParty" to Message.newBuilder().putFields("NoPartyIDs",
+                            createNoPartyIdsFields(newOrderSingle.tradingParty.noPartyIdsList).toValue()).toValue(),
+                "Symbol" to newOrderSingle.symbol.toValue()
             )
-        )
-        LOGGER.info("The created message of the type NewOrderSingle : ${shortDebugString(newOrderSingleMessage)}")
-        return newOrderSingleMessage.build()
+        ).build()
     }
 
     private fun createQuote(requestTyped: PlaceMessageRequestTyped): Message {
@@ -88,6 +96,7 @@ class ConvertorsRequest {
                 "BidSize" to quote.bidSize.toValue(),
                 "BidPx" to quote.bidPx.toValue(),
                 "SecurityID" to quote.securityId.toValue(),
+                "NoPartyIDs" to createNoPartyIdsFields(quote.noPartyIdsList).toValue(),
                 "QuoteType" to quote.quoteType.toValue()
             )
         ).build()
@@ -103,7 +112,16 @@ class ConvertorsRequest {
         ).build()
     }
 
-    companion object {
-        private val LOGGER = LoggerFactory.getLogger(ConvertorsRequest::class.java)
+    private fun createNoPartyIdsFields(listNoPartyIds: List<NoPartyIDs>): List<Message.Builder> {
+        val messages: MutableList<Message.Builder> = ArrayList()
+        for (noPartyIds in listNoPartyIds) {
+            messages.add(
+                Message.newBuilder()
+                    .putFields("PartyID", noPartyIds.partyId.toValue())
+                    .putFields("PartyIDSource", noPartyIds.partyIdSource.toValue())
+                    .putFields("PartyRole", noPartyIds.partyRole.toValue())
+            )
+        }
+        return messages
     }
 }

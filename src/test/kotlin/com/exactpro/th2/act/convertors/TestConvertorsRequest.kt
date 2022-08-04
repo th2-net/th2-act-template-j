@@ -17,10 +17,7 @@
 package com.exactpro.th2.act.convertors
 
 import com.exactpro.th2.act.grpc.*
-import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.grpc.MessageID
-import com.exactpro.th2.common.grpc.MessageMetadata
+import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.common.message.get
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.value.toValue
@@ -41,11 +38,21 @@ class TestConvertorsRequest {
                 .setMessageTyped(
                     RequestMessageTyped.newBuilder().setNewOrderSingle(
                         NewOrderSingle.newBuilder().apply {
-                            price = 1F
-                            orderQty = 1F
+                            securityId = "SecurityID"
+                            secondaryClOrdId = "SecondaryClOrdID"
+                            ordType = "OrdType"
+                            accountType = 1
+                            orderCapacity = "OrderCapacity"
+                            orderQty = 1.0F
+                            displayQty = 1.0F
+                            price = 1.0F
+                            clOrdId = "ClOrdID"
+                            securityIdSource = "SecurityIDSource"
                             side = "Side"
                             timeInForce = "TimeInForce"
-                            userId = "UserId"
+                            transactTime = "TransactTime"
+                            tradingParty = tradingParty(5)
+                            symbol = "Symbol"
                         }
                     )
                 ).build()
@@ -58,11 +65,21 @@ class TestConvertorsRequest {
             that("NewOrderSingle").isEqualTo(requestMsg.messageType)
             that(connectionID).isEqualTo(requestMsg.metadata.id.connectionId)
 
-            that(expendedMsg.price.toString()).isEqualTo(requestMsg["Price"]!!.simpleValue).isNotEqualTo("0.0")
-            that(expendedMsg.orderQty.toString()).isEqualTo(requestMsg["OrderQty"]!!.simpleValue).isNotEqualTo("0.0")
-            that(expendedMsg.side).isEqualTo(requestMsg["Side"]!!.simpleValue).isNotEqualTo("")
-            that(expendedMsg.timeInForce).isEqualTo(requestMsg["TimeInForce"]!!.simpleValue).isNotEqualTo("")
-            that(expendedMsg.userId).isEqualTo(requestMsg["UserID"]!!.simpleValue).isNotEqualTo("")
+            that(expendedMsg.securityId).isEqualTo(requestMsg["SecurityID"]!!.simpleValue)
+            that(expendedMsg.securityIdSource).isEqualTo(requestMsg["SecurityIDSource"]!!.simpleValue)
+            that(expendedMsg.ordType).isEqualTo(requestMsg["OrdType"]!!.simpleValue)
+            that(expendedMsg.accountType.toString()).isEqualTo(requestMsg["AccountType"]!!.simpleValue)
+            that(expendedMsg.orderCapacity).isEqualTo(requestMsg["OrderCapacity"]!!.simpleValue)
+            that(expendedMsg.orderQty.toString()).isEqualTo(requestMsg["OrderQty"]!!.simpleValue)
+            that(expendedMsg.displayQty.toString()).isEqualTo(requestMsg["DisplayQty"]!!.simpleValue)
+            that(expendedMsg.price.toString()).isEqualTo(requestMsg["Price"]!!.simpleValue)
+            that(expendedMsg.clOrdId).isEqualTo(requestMsg["ClOrdID"]!!.simpleValue)
+            that(expendedMsg.secondaryClOrdId).isEqualTo(requestMsg["SecondaryClOrdID"]!!.simpleValue)
+            that(expendedMsg.side).isEqualTo(requestMsg["Side"]!!.simpleValue)
+            that(expendedMsg.timeInForce).isEqualTo(requestMsg["TimeInForce"]!!.simpleValue)
+            that(expendedMsg.transactTime).isEqualTo(requestMsg["TransactTime"]!!.simpleValue)
+            that(Message.newBuilder().putFields("NoPartyIDs", noPartyIDsList(5).toValue()).build().toValue())
+                .isEqualTo(requestMsg["TradingParty"])
         }
     }
 
