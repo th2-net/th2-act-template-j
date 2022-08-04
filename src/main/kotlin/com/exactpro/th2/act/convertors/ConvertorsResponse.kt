@@ -79,12 +79,12 @@ class ConvertorsResponse {
 
             val header = Header.newBuilder().apply {
                 beginString = field(headerField, "BeginString")
-                senderCompId = field(headerField, "SenderCompId")
+                senderCompId = field(headerField, "SenderCompID")
                 sendingTime = field(headerField, "SendingTime")
                 msgSeqNum = field(headerField, "MsgSeqNum").toInt()
                 bodyLength = field(headerField, "BodyLength").toInt()
                 msgType = field(headerField, "MsgType")
-                targetCompId = field(headerField, "TargetCompId")
+                targetCompId = field(headerField, "TargetCompID")
             }
 
             executionReport.header = header.build()
