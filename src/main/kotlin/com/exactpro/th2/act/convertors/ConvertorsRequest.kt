@@ -22,6 +22,8 @@ import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.MessageMetadata
 import com.exactpro.th2.common.value.toValue
+import com.google.protobuf.TextFormat.shortDebugString
+import org.slf4j.LoggerFactory
 
 class ConvertorsRequest {
     fun createMessage(requestTyped: PlaceMessageRequestTyped): Message {
@@ -54,16 +56,19 @@ class ConvertorsRequest {
 
     private fun createNewOrderSingle(requestTyped: PlaceMessageRequestTyped): Message {
         val newOrderSingle = requestTyped.messageTyped.newOrderSingle
-        return messageBuilder(requestTyped).putAllFields(
+        val newOrderSingleMessage = messageBuilder(requestTyped)
+        if (newOrderSingle.side != "") newOrderSingleMessage.putFields("Side", newOrderSingle.side.toValue())
+        if (newOrderSingle.timeInForce != "") newOrderSingleMessage.putFields("TimeInForce", newOrderSingle.timeInForce.toValue())
+        if (newOrderSingle.userId != "") newOrderSingleMessage.putFields("UserID", newOrderSingle.userId.toValue())
+        if (newOrderSingle.instrument != "") newOrderSingleMessage.putFields("Instrument", newOrderSingle.instrument.toValue())
+        newOrderSingleMessage.putAllFields(
             mutableMapOf(
                 "Price" to newOrderSingle.price.toValue(),
-                "OrderQty" to newOrderSingle.orderQty.toValue(),
-                "Side" to newOrderSingle.side.toValue(),
-                "TimeInForce" to newOrderSingle.timeInForce.toValue(),
-                "UserID" to newOrderSingle.userId.toValue(),
-                "Instrument" to newOrderSingle.instrument.toValue()
+                "OrderQty" to newOrderSingle.orderQty.toValue()
             )
-        ).build()
+        )
+        LOGGER.info("The created message of the type NewOrderSingle : ${shortDebugString(newOrderSingleMessage)}")
+        return newOrderSingleMessage.build()
     }
 
     private fun createQuote(requestTyped: PlaceMessageRequestTyped): Message {
@@ -96,5 +101,9 @@ class ConvertorsRequest {
                 "SecurityReqID" to securityListRequest.securityReqId.toValue()
             )
         ).build()
+    }
+
+    companion object {
+        private val LOGGER = LoggerFactory.getLogger(ConvertorsRequest::class.java)
     }
 }

@@ -45,6 +45,7 @@ class TestConvertorsRequest {
                             orderQty = 1F
                             side = "Side"
                             timeInForce = "TimeInForce"
+                            userId = "UserId"
                         }
                     )
                 ).build()
@@ -61,6 +62,7 @@ class TestConvertorsRequest {
             that(expendedMsg.orderQty.toString()).isEqualTo(requestMsg["OrderQty"]!!.simpleValue).isNotEqualTo("0.0")
             that(expendedMsg.side).isEqualTo(requestMsg["Side"]!!.simpleValue).isNotEqualTo("")
             that(expendedMsg.timeInForce).isEqualTo(requestMsg["TimeInForce"]!!.simpleValue).isNotEqualTo("")
+            that(expendedMsg.userId).isEqualTo(requestMsg["UserID"]!!.simpleValue).isNotEqualTo("")
         }
     }
 
