@@ -90,7 +90,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.39.3'
     implementation 'com.exactpro.th2:grpc-act-template:3.5.0-th2-2549-2555714499-SNAPSHOT'
-    implementation 'com.exactpro.th2:act-core:0.0.1-dev-2816456365-SNAPSHOT'
+    implementation 'com.exactpro.th2:act-core:0.0.1-dev-2816604926-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:3.4.2'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
