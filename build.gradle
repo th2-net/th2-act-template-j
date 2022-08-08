@@ -90,7 +90,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.39.3'
     implementation 'com.exactpro.th2:grpc-act-template:3.5.0-th2-2549-2555714499-SNAPSHOT'
-    implementation 'com.exactpro.th2:act-core:0.0.1-dev-2790265825-SNAPSHOT'
+    implementation 'com.exactpro.th2:act-core:0.0.1-dev-2815826881-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:3.4.2'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
@@ -98,8 +98,6 @@ dependencies {
 
     implementation "org.slf4j:slf4j-log4j12"
     implementation "org.slf4j:slf4j-api"
-
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.5.32"
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation 'io.strikt:strikt-core:0.34.1'
