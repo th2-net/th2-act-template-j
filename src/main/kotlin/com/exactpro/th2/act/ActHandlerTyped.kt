@@ -42,7 +42,7 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("placeOrderFIX request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "placeOrderFIX", "placeOrderFIX", request.parentEventId, 10_000)
+        actionFactory.createAction(responseObserver, "placeOrderFIX", "Place order FIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
                         && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
@@ -50,7 +50,8 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId)
+
+                val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -81,10 +82,10 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("Sending  message request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "sendMessage", "sendMessage", request.parentEventId, 10_000)
+        actionFactory.createAction(responseObserver, "sendMessage", "Send message", request.parentEventId, 10_000)
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -107,7 +108,7 @@ class ActHandlerTyped(
         actionFactory.createAction(
             responseObserver,
             "placeOrderMassCancelRequestFIX",
-            "placeOrderMassCancelRequestFIX",
+            "Place order mass cancel request FIX",
             request.parentEventId,
             10_000
         )
@@ -118,7 +119,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -145,7 +146,7 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("placeQuoteCancelFIX request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "placeQuoteCancelFIX", request.parentEventId, 10_000)
+        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "Place quote cancel FIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
                         && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
@@ -153,7 +154,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -183,7 +184,7 @@ class ActHandlerTyped(
         actionFactory.createAction(
             responseObserver,
             "placeSecurityListRequest",
-            "placeSecurityListRequest",
+            "Place security list request",
             request.parentEventId,
             10_000
         )
@@ -194,7 +195,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -227,7 +228,7 @@ class ActHandlerTyped(
         actionFactory.createAction(
             responseObserver,
             "placeQuoteRequestFIX",
-            "placeQuoteRequestFIX",
+            "Place quote request FIX",
             request.parentEventId,
             10_000
         )
@@ -238,7 +239,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -268,7 +269,7 @@ class ActHandlerTyped(
         actionFactory.createAction(
             responseObserver,
             "placeQuoteResponseFIX",
-            "placeQuoteResponseFIX",
+            "Place quote response FIX",
             request.parentEventId,
             10_000
         )
@@ -279,7 +280,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
@@ -309,7 +310,7 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("placeQuoteFIX request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "placeQuoteFIX", "placeQuoteFIX", request.parentEventId, 10_000)
+        actionFactory.createAction(responseObserver, "placeQuoteFIX", "Place quote FIX", request.parentEventId, 10_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
                         && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
@@ -317,7 +318,7 @@ class ActHandlerTyped(
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
-                val checkpoint = registerCheckPoint(requestMessage.parentEventId)
+                val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
                 send(requestMessage, requestMessage.sessionAlias)
 
