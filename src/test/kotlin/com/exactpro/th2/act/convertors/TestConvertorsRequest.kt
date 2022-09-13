@@ -105,13 +105,12 @@ class TestConvertorsRequest {
 
         val requestMsg = convertorsRequest.createMessage(requestTyped)
         val expendedMsg = requestTyped.messageTyped.quote
-
         expect {
             that(parentEventID).isEqualTo(requestMsg.parentEventId)
             that("Quote").isEqualTo(requestMsg.messageType)
             that(connectionID).isEqualTo(requestMsg.metadata.id.connectionId)
 
-            that(expendedMsg.noQuoteQualifiersList[0].toString())
+            that(expendedMsg.noQuoteQualifiersList[0].quoteQualifier)
                 .isEqualTo(requestMsg["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.get("QuoteQualifier")?.simpleValue)
             that(expendedMsg.offerPx.toValue()).isEqualTo(requestMsg["OfferPx"]).isNotEqualTo("0.0".toValue())
             that(expendedMsg.offerSize.toValue()).isEqualTo(requestMsg["OfferSize"]).isNotEqualTo("0.0".toValue())

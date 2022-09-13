@@ -127,5 +127,5 @@ class ConvertorsRequest {
 
 
     private fun createNoQuoteQualifiersList(quoteQualifier: List<Quote.QuoteQualifier>): List<Message.Builder> =
-        quoteQualifier.stream().map { Message.newBuilder().putFields("QuoteQualifier", it.toValue()) }.toList()
+        quoteQualifier.stream().map { Message.newBuilder().putFields("QuoteQualifier", it.quoteQualifier.toValue()) }.toList()
 }
