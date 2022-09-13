@@ -347,8 +347,6 @@ class ActHandlerTyped(
                 val quote = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("Quote") {
                         (fieldsMap["QuoteType"] == 0.toValue()
-                                && (fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
-                            "QuoteQualifier")?.simpleValue ?: "") == "R"
                                 && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"])
                     }
                 }
