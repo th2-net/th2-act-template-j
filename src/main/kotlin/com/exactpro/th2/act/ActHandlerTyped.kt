@@ -216,7 +216,7 @@ class ActHandlerTyped(
                             fieldsMap["LastFragment"] == true.toValue()
                         }
                     }
-                } until { true }
+                } until { msg -> msg.fieldsMap["LastFragment"] == true.toValue() }
 
                 val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
@@ -346,17 +346,15 @@ class ActHandlerTyped(
                     }
                 }
 
-                val quoteAckReceive = repeat {
-                    receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("Quote") {
-                            fieldsMap["QuoteType"] == 0.toValue()
-                                    && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
-                                "QuoteQualifier"
-                            ) == "R".toValue()
-                                    && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"]
-                        }
+                val quote = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("Quote") {
+                        fieldsMap["QuoteType"] == 0.toValue()
+                                && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
+                            "QuoteQualifier"
+                        ) == "R".toValue()
+                                && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"]
                     }
-                } until { true }
+                }
                 val placeMessageResponseTyped = mutableListOf<PlaceMessageResponseTyped>()
 
                 placeMessageResponseTyped.add(
@@ -366,14 +364,13 @@ class ActHandlerTyped(
                         .setCheckpointId(checkpoint).build()
                 )
 
-                quoteAckReceive.forEach {
-                    placeMessageResponseTyped.add(
-                        PlaceMessageResponseTyped.newBuilder()
-                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(it))
-                            .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                            .setCheckpointId(checkpoint).build()
-                    )
-                }
+
+                placeMessageResponseTyped.add(
+                    PlaceMessageResponseTyped.newBuilder()
+                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(quote))
+                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                        .setCheckpointId(checkpoint).build()
+                )
 
                 val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
                     .addAllPlaceMessageResponseTyped(placeMessageResponseTyped).build()
