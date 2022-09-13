@@ -18,11 +18,13 @@ package com.exactpro.th2.act.convertors
 
 import com.exactpro.th2.act.grpc.NoPartyIDs
 import com.exactpro.th2.act.grpc.PlaceMessageRequestTyped
+import com.exactpro.th2.act.grpc.Quote
 import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.MessageMetadata
 import com.exactpro.th2.common.value.toValue
+import kotlin.streams.toList
 
 
 class ConvertorsRequest {
@@ -58,7 +60,7 @@ class ConvertorsRequest {
         val newOrderSingle = requestTyped.messageTyped.newOrderSingle
         return messageBuilder(requestTyped).putAllFields(
             mutableMapOf(
-                "Instrument" to  Message.newBuilder()
+                "Instrument" to Message.newBuilder()
                     .putAllFields(
                         mutableMapOf(
                             "Symbol" to newOrderSingle.symbol.toValue(),
@@ -77,21 +79,20 @@ class ConvertorsRequest {
                 "Side" to newOrderSingle.side.toValue(),
                 "TimeInForce" to newOrderSingle.timeInForce.toValue(),
                 "TransactTime" to newOrderSingle.transactTime.toValue(),
-                "TradingParty" to Message.newBuilder().putFields("NoPartyIDs",
-                            createNoPartyIdsFields(newOrderSingle.tradingParty.noPartyIdsList).toValue()).toValue(),
+                "TradingParty" to Message.newBuilder().putFields(
+                    "NoPartyIDs",
+                    createNoPartyIdsFields(newOrderSingle.tradingParty.noPartyIdsList).toValue()
+                ).toValue(),
             )
         ).build()
     }
 
     private fun createQuote(requestTyped: PlaceMessageRequestTyped): Message {
         val quote = requestTyped.messageTyped.quote
-        val noQuoteQualifiers = Message.newBuilder()
-        for (quoteQualifier in quote.noQuoteQualifiersList) {
-            noQuoteQualifiers.putFields("QuoteQualifier", quoteQualifier.quoteQualifier.toValue())
-        }
+
         return messageBuilder(requestTyped).putAllFields(
             mutableMapOf(
-                "NoQuoteQualifiers" to noQuoteQualifiers.toValue(),
+                "NoQuoteQualifiers" to createNoQuoteQualifiersList(quote.noQuoteQualifiersList).toValue(),
                 "OfferPx" to quote.offerPx.toValue(),
                 "OfferSize" to quote.offerSize.toValue(),
                 "QuoteID" to quote.quoteId.toValue(),
@@ -116,16 +117,15 @@ class ConvertorsRequest {
         ).build()
     }
 
-    private fun createNoPartyIdsFields(listNoPartyIds: List<NoPartyIDs>): List<Message.Builder> {
-        val messages: MutableList<Message.Builder> = ArrayList()
-        for (noPartyIds in listNoPartyIds) {
-            messages.add(
-                Message.newBuilder()
-                    .putFields("PartyID", noPartyIds.partyId.toValue())
-                    .putFields("PartyIDSource", noPartyIds.partyIdSource.toValue())
-                    .putFields("PartyRole", noPartyIds.partyRole.toValue())
-            )
-        }
-        return messages
-    }
+    private fun createNoPartyIdsFields(listNoPartyIds: List<NoPartyIDs>): List<Message.Builder> =
+        listNoPartyIds.stream().map {
+            Message.newBuilder()
+                .putFields("PartyID", it.partyId.toValue())
+                .putFields("PartyIDSource", it.partyIdSource.toValue())
+                .putFields("PartyRole", it.partyRole.toValue())
+        }.toList()
+
+
+    private fun createNoQuoteQualifiersList(quoteQualifier: List<Quote.QuoteQualifier>): List<Message.Builder> =
+        quoteQualifier.stream().map { Message.newBuilder().putFields("QuoteQualifier", it.toValue()) }.toList()
 }

@@ -111,8 +111,8 @@ class TestConvertorsRequest {
             that("Quote").isEqualTo(requestMsg.messageType)
             that(connectionID).isEqualTo(requestMsg.metadata.id.connectionId)
 
-            that(expendedMsg.noQuoteQualifiersList[0].quoteQualifier)
-                .isEqualTo(requestMsg["NoQuoteQualifiers"]!!.messageValue["QuoteQualifier"]!!.simpleValue)
+            that(expendedMsg.noQuoteQualifiersList[0].toString())
+                .isEqualTo(requestMsg["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.get("QuoteQualifier")?.simpleValue)
             that(expendedMsg.offerPx.toValue()).isEqualTo(requestMsg["OfferPx"]).isNotEqualTo("0.0".toValue())
             that(expendedMsg.offerSize.toValue()).isEqualTo(requestMsg["OfferSize"]).isNotEqualTo("0.0".toValue())
             that(expendedMsg.quoteId).isEqualTo(requestMsg["QuoteID"]!!.simpleValue).isNotEqualTo("")
