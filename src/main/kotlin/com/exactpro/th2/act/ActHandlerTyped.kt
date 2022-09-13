@@ -2,7 +2,7 @@
  * Copyright 2022-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * you  may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
@@ -346,11 +346,10 @@ class ActHandlerTyped(
 
                 val quote = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("Quote") {
-                        fieldsMap["QuoteType"] == 0.toValue()
-                                && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
-                            "QuoteQualifier"
-                        ) == "R".toValue()
-                                && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"]
+                        (fieldsMap["QuoteType"] == 0.toValue()
+                                && (fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
+                            "QuoteQualifier")?.simpleValue ?: "") == "R"
+                                && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"])
                     }
                 }
 
