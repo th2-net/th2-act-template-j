@@ -25,10 +25,7 @@ import com.exactpro.th2.common.grpc.Checkpoint
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.RequestStatus
-import com.exactpro.th2.common.message.direction
-import com.exactpro.th2.common.message.messageType
-import com.exactpro.th2.common.message.sequence
-import com.exactpro.th2.common.message.sessionAlias
+import com.exactpro.th2.common.message.*
 import com.exactpro.th2.common.value.toValue
 import com.google.protobuf.TextFormat.shortDebugString
 import io.grpc.stub.StreamObserver
@@ -347,6 +344,7 @@ class ActHandlerTyped(
                 val quote = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("Quote") {
                         (fieldsMap["QuoteType"] == 0.toValue()
+                                && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.get("QuoteQualifier")?.simpleValue == "R"
                                 && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"])
                     }
                 }
