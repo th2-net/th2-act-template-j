@@ -21,10 +21,15 @@ import com.exactpro.th2.act.convertors.ConvertorsResponse
 import com.exactpro.th2.act.core.action.ActionFactory
 import com.exactpro.th2.act.grpc.*
 import com.exactpro.th2.act.grpc.ActTypedGrpc.ActTypedImplBase
-import com.exactpro.th2.common.grpc.*
+import com.exactpro.th2.common.grpc.Checkpoint
+import com.exactpro.th2.common.grpc.Direction
+import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.RequestStatus
 import com.exactpro.th2.common.message.direction
 import com.exactpro.th2.common.message.messageType
+import com.exactpro.th2.common.message.sequence
 import com.exactpro.th2.common.message.sessionAlias
+import com.exactpro.th2.common.value.toValue
 import com.google.protobuf.TextFormat.shortDebugString
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
@@ -53,7 +58,7 @@ class ActHandlerTyped(
 
                 val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
-                send(requestMessage, requestMessage.sessionAlias)
+                val rejectMessage = send(requestMessage, requestMessage.sessionAlias)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("ExecutionReport") {
@@ -62,6 +67,7 @@ class ActHandlerTyped(
                     failOn("BusinessMessageReject") {
                         fieldsMap["BusinessRejectRefID"] == requestMessage.fieldsMap["ClOrdID"]
                     }
+                    failOn(rejectMessage.messageType) { this.sequence == rejectMessage.sequence }
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped =
@@ -146,7 +152,13 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("placeQuoteCancelFIX request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "placeQuoteCancelFIX", "Place quote cancel FIX", request.parentEventId, 10_000)
+        actionFactory.createAction(
+            responseObserver,
+            "placeQuoteCancelFIX",
+            "Place quote cancel FIX",
+            request.parentEventId,
+            10_000
+        )
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
                         && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
@@ -189,9 +201,8 @@ class ActHandlerTyped(
             10_000
         )
             .preFilter { msg ->
-                msg.messageType != "Heartbeat"
-                        && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
-                        && msg.direction == Direction.FIRST
+                msg.messageType == "SecurityList"
+                        && msg.fieldsMap["SecurityReqID"] == request.messageTyped.securityListRequest.securityReqId.toValue()
             }
             .execute {
                 val requestMessage = convertorsRequest.createMessage(request)
@@ -199,17 +210,22 @@ class ActHandlerTyped(
 
                 send(requestMessage, requestMessage.sessionAlias)
 
-                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                    passOn("SecurityStatus") {
-                        fieldsMap["SecurityID"] == requestMessage.fieldsMap["SecurityID"]
+                val securityListRequest = repeat {
+                    receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                        passOn("SecurityList") {
+                            fieldsMap["LastFragment"] == true.toValue()
+                        }
                     }
+
+                } until { msg ->
+                    msg.fieldsMap["LastFragment"] == true.toValue()
                 }
 
                 val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                     .setCheckpointId(checkpoint)
 
-                val securityListDictionary = createSecurityListDictionary(receiveMessage)
+                val securityListDictionary = createSecurityListDictionary(securityListRequest)
                 if (securityListDictionary.isNotEmpty()) {
                     placeSecurityListResponse.putAllSecurityListDictionary(securityListDictionary)
                 }
@@ -322,45 +338,75 @@ class ActHandlerTyped(
 
                 send(requestMessage, requestMessage.sessionAlias)
 
-                val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                    passOn("QuoteAck") {
-                        fieldsMap["RFQID"] == requestMessage.fieldsMap["RFQID"]
+                val quoteStatusReportReceive = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                    passOn("QuoteStatusReport") {
+                        fieldsMap["QuoteID"] == requestMessage.fieldsMap["QuoteID"]
+                                && fieldsMap["QuoteStatus"] == 0.toValue()
+                    }
+                    failOn("QuoteStatusReport") {
+                        fieldsMap["QuoteID"] == requestMessage.fieldsMap["QuoteID"]
+                                && fieldsMap["QuoteStatus"] == 5.toValue()
                     }
                 }
 
-                val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
-                    .addPlaceMessageResponseTyped(
+                val quoteAckReceive = repeat {
+                    receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                        passOn("QuoteAck") {
+                            fieldsMap["QuoteType"] == 0.toValue()
+                                    && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
+                                "QuoteQualifier"
+                            ) == "R".toValue()
+                                    && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"]
+                        }
+                    }
+                } until { true }
+                val placeMessageResponseTyped = mutableListOf<PlaceMessageResponseTyped>()
+
+                placeMessageResponseTyped.add(
+                    PlaceMessageResponseTyped.newBuilder()
+                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(quoteStatusReportReceive))
+                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                        .setCheckpointId(checkpoint).build()
+                )
+                
+                quoteAckReceive.forEach {
+                    placeMessageResponseTyped.add(
                         PlaceMessageResponseTyped.newBuilder()
-                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(receiveMessage))
+                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(it))
                             .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                            .setCheckpointId(checkpoint)
-                    ).build()
+                            .setCheckpointId(checkpoint).build()
+                    )
+                }
+
+                val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
+                    .addAllPlaceMessageResponseTyped(placeMessageResponseTyped).build()
 
                 emitResult(placeMessageMultipleResponseTyped)
             }
         LOGGER.debug("placeQuoteFIX has finished")
     }
 
-    private fun createSecurityListDictionary(responseMessage: Message): Map<Int, Symbols> {
-        val securityList: MutableList<String> = ArrayList()
-        val noRelatedSym = responseMessage.fieldsMap["NoRelatedSym"]
-        if (noRelatedSym != null) {
-            noRelatedSym.listValue.valuesList.forEach {
-                val symbol = it.messageValue.fieldsMap["Symbol"]
-                if (symbol != null) {
-                    securityList.add(symbol.simpleValue)
+    private fun createSecurityListDictionary(responseMessage: List<Message>): Map<Int, Symbols> {
+        val securityListDictionary = mutableMapOf<Int, Symbols>()
+        responseMessage.forEach { message ->
+            val securityList: MutableList<String> = ArrayList()
+            val noRelatedSym = message.fieldsMap["NoRelatedSym"]
+            if (noRelatedSym != null) {
+                noRelatedSym.listValue.valuesList.forEach {
+                    val symbol = it.messageValue.fieldsMap["Symbol"]
+                    if (symbol != null) {
+                        securityList.add(symbol.simpleValue)
+                    }
+                }
+                for (i in 0 until securityList.size step 100) {
+                    securityListDictionary[i / 100] =
+                        Symbols.newBuilder().addAllSymbol(
+                            securityList.subList(i, (i + 100).coerceAtMost(securityList.size))
+                        ).build()
                 }
             }
-            val securityListDictionary = mutableMapOf<Int, Symbols>()
-            for (i in 0 until securityList.size step 100) {
-                securityListDictionary[i / 100] =
-                    Symbols.newBuilder().addAllSymbol(
-                        securityList.subList(i, (i + 100).coerceAtMost(securityList.size))
-                    ).build()
-            }
-            return securityListDictionary
         }
-        return mutableMapOf()
+        return securityListDictionary
     }
 
     companion object {
