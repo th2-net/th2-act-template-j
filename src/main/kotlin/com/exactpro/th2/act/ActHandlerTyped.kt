@@ -212,11 +212,9 @@ class ActHandlerTyped(
 
                 val securityListRequest = repeat {
                     receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("SecurityList") {
-                            fieldsMap["LastFragment"] == true.toValue()
-                        }
+                        passOn("SecurityList") { true }
                     }
-                } until { msg -> msg.fieldsMap["LastFragment"] == true.toValue() }
+                } until { msg -> msg.fieldsMap["LastFragment"] == false.toValue() }
 
                 val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
@@ -355,6 +353,7 @@ class ActHandlerTyped(
                                 && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"]
                     }
                 }
+
                 val placeMessageResponseTyped = mutableListOf<PlaceMessageResponseTyped>()
 
                 placeMessageResponseTyped.add(
