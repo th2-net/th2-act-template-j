@@ -318,7 +318,7 @@ class ActHandlerTyped(
     ) {
         LOGGER.debug("placeQuoteFIX request: ${shortDebugString(request)}")
 
-        actionFactory.createAction(responseObserver, "placeQuoteFIX", "Place quote FIX", request.parentEventId, 10_000)
+        actionFactory.createAction(responseObserver, "placeQuoteFIX", "Place quote FIX", request.parentEventId, 30_000)
             .preFilter { msg ->
                 msg.messageType != "Heartbeat"
                         && msg.sessionAlias == request.metadata.id.connectionId.sessionAlias
