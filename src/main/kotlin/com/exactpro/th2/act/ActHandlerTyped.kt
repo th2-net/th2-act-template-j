@@ -216,10 +216,7 @@ class ActHandlerTyped(
                             fieldsMap["LastFragment"] == true.toValue()
                         }
                     }
-
-                } until { msg ->
-                    msg.fieldsMap["LastFragment"] == true.toValue()
-                }
+                } until { true }
 
                 val placeSecurityListResponse = PlaceSecurityListResponse.newBuilder()
                     .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
@@ -351,7 +348,7 @@ class ActHandlerTyped(
 
                 val quoteAckReceive = repeat {
                     receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                        passOn("QuoteAck") {
+                        passOn("Quote") {
                             fieldsMap["QuoteType"] == 0.toValue()
                                     && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.fieldsMap?.get(
                                 "QuoteQualifier"
@@ -368,7 +365,7 @@ class ActHandlerTyped(
                         .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
                         .setCheckpointId(checkpoint).build()
                 )
-                
+
                 quoteAckReceive.forEach {
                     placeMessageResponseTyped.add(
                         PlaceMessageResponseTyped.newBuilder()
