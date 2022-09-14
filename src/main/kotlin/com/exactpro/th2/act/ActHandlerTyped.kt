@@ -17,7 +17,6 @@
 package com.exactpro.th2.act
 
 import com.exactpro.th2.act.core.action.ActionFactory
-import com.exactpro.th2.act.core.messages.MessageBuilder
 import com.exactpro.th2.act.grpc.*
 import com.exactpro.th2.act.grpc.ActTypedGrpc.ActTypedImplBase
 import com.exactpro.th2.common.grpc.Checkpoint
@@ -30,6 +29,7 @@ import com.google.protobuf.TextFormat.shortDebugString
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 import kotlin.streams.toList
+import com.exactpro.th2.act.core.messages.message
 
 class ActHandlerTyped(
     private val actionFactory: ActionFactory
@@ -48,7 +48,7 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = MessageBuilder create {
+                val requestMessage = message {
                     metadata {
                         messageType = request.metadata.messageType
                         id {
@@ -158,7 +158,7 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = MessageBuilder create {
+                val requestMessage = message {
                     metadata {
                         messageType = request.metadata.messageType
                         id {
@@ -302,7 +302,7 @@ class ActHandlerTyped(
                         && msg.fieldsMap["SecurityReqID"] == request.messageTyped.securityListRequest.securityReqId.toValue()
             }
             .execute {
-                val requestMessage = MessageBuilder create {
+                val requestMessage = message {
                     metadata {
                         messageType = request.metadata.messageType
                         id {
