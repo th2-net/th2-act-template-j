@@ -47,7 +47,7 @@ class ActHandlerTyped(
             .execute {
                 val requestMessage = message(
                     request.metadata.messageType,
-                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                    request.metadata.id.connectionId
                 ) {
                     parentEventId = request.parentEventId
                     body {
@@ -154,7 +154,7 @@ class ActHandlerTyped(
             .execute {
                 val requestMessage = message(
                     request.metadata.messageType,
-                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                    request.metadata.id.connectionId
                 ) {
                     parentEventId = request.parentEventId
                     body {
@@ -295,7 +295,7 @@ class ActHandlerTyped(
             .execute {
                 val requestMessage = message(
                     request.metadata.messageType,
-                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                    request.metadata.id.connectionId
                 ) {
                     parentEventId = request.parentEventId
                     body {
