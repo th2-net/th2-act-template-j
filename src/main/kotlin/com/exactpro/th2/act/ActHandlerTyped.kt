@@ -17,19 +17,16 @@
 package com.exactpro.th2.act
 
 import com.exactpro.th2.act.core.action.ActionFactory
+import com.exactpro.th2.act.core.messages.message
 import com.exactpro.th2.act.grpc.*
 import com.exactpro.th2.act.grpc.ActTypedGrpc.ActTypedImplBase
-import com.exactpro.th2.common.grpc.Checkpoint
-import com.exactpro.th2.common.grpc.Direction
-import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.RequestStatus
+import com.exactpro.th2.common.grpc.*
 import com.exactpro.th2.common.message.*
 import com.exactpro.th2.common.value.toValue
 import com.google.protobuf.TextFormat.shortDebugString
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 import kotlin.streams.toList
-import com.exactpro.th2.act.core.messages.message
 
 class ActHandlerTyped(
     private val actionFactory: ActionFactory
@@ -48,12 +45,10 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = message(request.metadata.messageType) {
-                    metadata {
-                        id {
-                            sessionAlias = request.metadata.id.connectionId.sessionAlias
-                        }
-                    }
+                val requestMessage = message(
+                    request.metadata.messageType,
+                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                ) {
                     parentEventId = request.parentEventId
                     body {
                         val newOrderSingle = request.messageTyped.newOrderSingle
@@ -157,12 +152,10 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = message(request.metadata.messageType) {
-                    metadata {
-                        id {
-                            sessionAlias = request.metadata.id.connectionId.sessionAlias
-                        }
-                    }
+                val requestMessage = message(
+                    request.metadata.messageType,
+                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                ) {
                     parentEventId = request.parentEventId
                     body {
                         val quote = request.messageTyped.quote
@@ -300,12 +293,10 @@ class ActHandlerTyped(
                         && msg.fieldsMap["SecurityReqID"] == request.messageTyped.securityListRequest.securityReqId.toValue()
             }
             .execute {
-                val requestMessage = message(request.metadata.messageType) {
-                    metadata {
-                        id {
-                            sessionAlias = request.metadata.id.connectionId.sessionAlias
-                        }
-                    }
+                val requestMessage = message(
+                    request.metadata.messageType,
+                    ConnectionID.newBuilder().setSessionAlias(request.metadata.id.connectionId.sessionAlias).build()
+                ) {
                     parentEventId = request.parentEventId
                     body {
                         val securityListRequest = request.messageTyped.securityListRequest
