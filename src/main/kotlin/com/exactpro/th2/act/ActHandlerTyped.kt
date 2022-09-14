@@ -48,9 +48,8 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = message {
+                val requestMessage = message(request.metadata.messageType) {
                     metadata {
-                        messageType = request.metadata.messageType
                         id {
                             sessionAlias = request.metadata.id.connectionId.sessionAlias
                         }
@@ -80,7 +79,7 @@ class ActHandlerTyped(
                                     "PartyID" to it.partyId.toValue()
                                     "PartyIDSource" to it.partyIdSource.toValue()
                                     "PartyRole" to it.partyRole.toValue()
-                                }.messageBuilder
+                                }.build()
                             }.toList().toValue()
                         }
                     }
@@ -158,9 +157,8 @@ class ActHandlerTyped(
                         && msg.direction == Direction.FIRST
             }
             .execute {
-                val requestMessage = message {
+                val requestMessage = message(request.metadata.messageType) {
                     metadata {
-                        messageType = request.metadata.messageType
                         id {
                             sessionAlias = request.metadata.id.connectionId.sessionAlias
                         }
@@ -184,7 +182,7 @@ class ActHandlerTyped(
                                 "PartyID" to it.partyId.toValue()
                                 "PartyIDSource" to it.partyIdSource.toValue()
                                 "PartyRole" to it.partyRole.toValue()
-                            }.messageBuilder
+                            }.build()
                         }.toList()
                         "QuoteType" to quote.quoteType.toValue()
                     }
@@ -302,9 +300,8 @@ class ActHandlerTyped(
                         && msg.fieldsMap["SecurityReqID"] == request.messageTyped.securityListRequest.securityReqId.toValue()
             }
             .execute {
-                val requestMessage = message {
+                val requestMessage = message(request.metadata.messageType) {
                     metadata {
-                        messageType = request.metadata.messageType
                         id {
                             sessionAlias = request.metadata.id.connectionId.sessionAlias
                         }
