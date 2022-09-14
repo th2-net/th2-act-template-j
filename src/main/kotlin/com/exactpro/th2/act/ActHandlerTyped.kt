@@ -55,7 +55,7 @@ class ActHandlerTyped(
 
                 val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
-                val rejectMessage = send(requestMessage, requestMessage.sessionAlias)
+                val echoMessage = send(requestMessage, requestMessage.sessionAlias, 10_000, true)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("ExecutionReport") {
@@ -64,7 +64,7 @@ class ActHandlerTyped(
                     failOn("BusinessMessageReject") {
                         fieldsMap["BusinessRejectRefID"] == requestMessage.fieldsMap["ClOrdID"]
                     }
-                    failOn("Reject") { this.sequence == rejectMessage.sequence }
+                    failOn("Reject") { this.sequence == echoMessage.sequence }
                 }
 
                 val placeMessageResponseTyped: PlaceMessageResponseTyped =
@@ -108,12 +108,16 @@ class ActHandlerTyped(
                     }
                 }
 
-                val quote = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
-                    passOn("Quote") {
-                        (fieldsMap["QuoteType"] == 0.toValue()
-                                && fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.get("QuoteQualifier")?.simpleValue == "R"
-                                && fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"])
+                val quote = repeat {
+                    receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
+                        passOn("Quote") { true }
                     }
+                } until { msg ->
+                    !(msg.fieldsMap["QuoteType"] == 0.toValue()
+                            && msg.fieldsMap["NoQuoteQualifiers"]?.listValue?.valuesList?.get(0)?.messageValue?.get(
+                        "QuoteQualifier"
+                    )?.simpleValue == "R"
+                            && msg.fieldsMap["Symbol"] == requestMessage.fieldsMap["Symbol"])
                 }
 
                 val placeMessageResponseTyped = mutableListOf<PlaceMessageResponseTyped>()
@@ -126,12 +130,14 @@ class ActHandlerTyped(
                 )
 
 
-                placeMessageResponseTyped.add(
-                    PlaceMessageResponseTyped.newBuilder()
-                        .setResponseMessageTyped(convertorsResponse.createResponseMessage(quote))
-                        .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
-                        .setCheckpointId(checkpoint).build()
-                )
+                quote.forEach {
+                    placeMessageResponseTyped.add(
+                        PlaceMessageResponseTyped.newBuilder()
+                            .setResponseMessageTyped(convertorsResponse.createResponseMessage(it))
+                            .setStatus(RequestStatus.newBuilder().setStatus(RequestStatus.Status.SUCCESS))
+                            .setCheckpointId(checkpoint).build()
+                    )
+                }
 
                 val placeMessageMultipleResponseTyped = PlaceMessageMultipleResponseTyped.newBuilder()
                     .addAllPlaceMessageResponseTyped(placeMessageResponseTyped).build()
