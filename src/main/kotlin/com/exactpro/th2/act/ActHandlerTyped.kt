@@ -82,7 +82,7 @@ class ActHandlerTyped(
 
                 val checkpoint: Checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
-                val echoMessage = send(requestMessage, requestMessage.sessionAlias, 10_000, true)
+                val echoMessage = send(requestMessage, timeout = 10_000, waitEcho = true)
 
                 val receiveMessage = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("ExecutionReport") {
@@ -183,7 +183,7 @@ class ActHandlerTyped(
 
                 val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
-                send(requestMessage, requestMessage.sessionAlias)
+                send(requestMessage)
 
                 val quoteStatusReportReceive = receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
                     passOn("QuoteStatusReport") {
@@ -307,7 +307,7 @@ class ActHandlerTyped(
 
                 val checkpoint = registerCheckPoint(requestMessage.parentEventId, request.description)
 
-                send(requestMessage, requestMessage.sessionAlias)
+                send(requestMessage)
 
                 val securityListRequest = repeat {
                     receive(10_000, requestMessage.sessionAlias, Direction.FIRST) {
