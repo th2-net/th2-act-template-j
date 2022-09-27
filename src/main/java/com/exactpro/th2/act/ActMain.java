@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.act.core.managers.SubscriptionManager;
+import com.exactpro.th2.act.core.routers.EventRouter;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
@@ -64,13 +65,14 @@ public class ActMain {
 
             ActionFactory actionFactory = new ActionFactory(
                     new com.exactpro.th2.act.core.routers.MessageRouter(messageBatchMessageRouter),
-                    new com.exactpro.th2.act.core.routers.EventRouter(factory.getEventBatchRouter()),
+                    new EventRouter(factory.getEventBatchRouter()),
                     subscriptionManager,
                     grpcRouter.getService(Check1Service.class)
             );
 
             ActHandlerTyped actHandlerTyped = new ActHandlerTyped(
-                    actionFactory
+                    actionFactory,
+                    factory.getCustomConfiguration(Configuration.class)
             );
 
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandlerTyped));

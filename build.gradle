@@ -12,17 +12,10 @@ buildscript {
 
 plugins {
     id 'com.palantir.docker' version '0.25.0'
-    id 'org.jetbrains.kotlin.jvm' version '1.5.32'
+    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'java'
-    id 'java-library'
     id 'application'
 }
-
-apply plugin: 'java'
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
-apply plugin: 'application'
-apply plugin: 'com.palantir.docker'
 
 apply plugin: 'th2plugin'
 
@@ -86,18 +79,18 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.0.0')
+    api platform('com.exactpro.th2:bom:4.0.1')
 
-    implementation 'com.exactpro.th2:common:3.39.3'
-    implementation 'com.exactpro.th2:grpc-act-template:3.5.0-th2-2549-2555714499-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:3.41.0'
+    implementation 'com.exactpro.th2:grpc-act-template:3.5.0-act-typed-refactor-3136447783-SNAPSHOT'
     implementation 'com.exactpro.th2:act-core:0.0.1-dev-3053042669-SNAPSHOT'
-    implementation 'com.exactpro.th2:grpc-check1:3.4.2'
+    implementation 'com.exactpro.th2:grpc-check1:3.6.0'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
 
-    implementation "org.slf4j:slf4j-log4j12"
     implementation "org.slf4j:slf4j-api"
+    implementation group: 'io.github.microutils', name: 'kotlin-logging', version: '2.1.21'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation 'io.strikt:strikt-core:0.34.1'
