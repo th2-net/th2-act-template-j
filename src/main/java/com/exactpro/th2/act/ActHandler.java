@@ -15,6 +15,32 @@
  */
 package com.exactpro.th2.act;
 
+import static com.exactpro.th2.common.event.Event.Status.FAILED;
+import static com.exactpro.th2.common.event.Event.Status.PASSED;
+import static com.exactpro.th2.common.event.Event.start;
+import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
+import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
+import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.lang.String.format;
+import static java.time.Instant.ofEpochMilli;
+import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.stream.Collectors.toUnmodifiableMap;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
@@ -33,52 +59,28 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.Checkpoint;
+import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.Checkpoint;
-import com.exactpro.th2.common.grpc.RequestStatus;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.grpc.MessageOrBuilder;
-import com.exactpro.th2.common.grpc.MessageMetadata;
-import com.exactpro.th2.common.grpc.Value;
-import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageMetadata;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.RequestStatus;
+import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
+
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.stub.StreamObserver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
-
-import static com.exactpro.th2.common.event.Event.Status.FAILED;
-import static com.exactpro.th2.common.event.Event.Status.PASSED;
-import static com.exactpro.th2.common.event.Event.start;
-import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
-import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
-import static com.google.protobuf.TextFormat.shortDebugString;
-import static java.lang.String.format;
-import static java.time.Instant.ofEpochMilli;
-import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
@@ -353,7 +355,7 @@ public class ActHandler extends ActImplBase {
                 .status(FAILED);
         com.exactpro.th2.common.event.bean.Message tableExpl = new com.exactpro.th2.common.event.bean.Message();
         tableExpl.setType("message");
-        tableExpl.setData("Unable to find response messages using this parameters:");
+        tableExpl.setData("Unable to find response messages using this filters:");
         errorEvent.bodyData(tableExpl);
         for (IBodyData data : noResponseBodySupplier.createNoResponseBody()) {
             errorEvent.bodyData(data);
@@ -369,7 +371,7 @@ public class ActHandler extends ActImplBase {
     }
 
     private IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
-        TreeTableBuilder treeTableBuilder = new TreeTableBuilder();
+        TreeTableBuilder treeTableBuilder = new TreeTableBuilder("act expected responses");
         CollectionBuilder passedOn = new CollectionBuilder();
         CollectionBuilder failedOn = new CollectionBuilder();
         for (Map.Entry<String, CheckMetadata> entry : expectedMessages.entrySet()) {
