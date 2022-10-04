@@ -348,15 +348,23 @@ public class ActHandler extends ActImplBase {
 
         Event errorEvent = Event.from(start)
                 .endTimestamp()
-                .name(format("Internal %s error", actName))
-                .type("No response found by target keys.")
+                .name("No response found")
+                .type(actName + " error")
                 .status(FAILED);
+        com.exactpro.th2.common.event.bean.Message tableExpl = new com.exactpro.th2.common.event.bean.Message();
+        tableExpl.setType("message");
+        tableExpl.setData("Unable to find response messages using this parameters:");
+        errorEvent.bodyData(tableExpl);
         for (IBodyData data : noResponseBodySupplier.createNoResponseBody()) {
-                errorEvent.bodyData(data);
+            errorEvent.bodyData(data);
         }
-        for(MessageID msgID : messageIDList){
+        for (MessageID msgID : messageIDList) {
             errorEvent.messageID(msgID);
         }
+        com.exactpro.th2.common.event.bean.Message attachedExpl = new com.exactpro.th2.common.event.bean.Message();
+        attachedExpl.setType("message");
+        attachedExpl.setData("All messages processed by the act are attached to this event.");
+        errorEvent.bodyData(attachedExpl);
         storeEvent(errorEvent.toProtoEvent(parentEventId.getId()));
     }
 
