@@ -16,16 +16,22 @@
 
 package com.exactpro.th2.act;
 
+import static java.lang.String.format;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Map.Entry;
+import java.util.UUID;
+
 import com.exactpro.th2.common.event.bean.IColumn;
 import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.common.event.bean.TreeTableEntry;
 import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.Value;
-
-import java.util.Map.Entry;
+import com.google.protobuf.ByteString;
 
 public class EventUtils {
     public static TreeTable toTreeTable(Message message) {
@@ -67,4 +73,13 @@ public class EventUtils {
             this.fieldValue = fieldValue;
         }
     }
+
+    public static EventID generateID() {
+        return EventID.newBuilder().setId(UUID.randomUUID().toString()).build();
+    }
+
+    public static ByteString toEventBody(String text) {
+        return ByteString.copyFrom(format("[{\"data\":\"%s\", \"type\":\"message\" } ]", text).getBytes(StandardCharsets.UTF_8));
+    }
+
 }

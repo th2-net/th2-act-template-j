@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl;
 import com.exactpro.th2.check1.grpc.Check1Service;
 import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageGroupBatch;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.exactpro.th2.common.schema.grpc.router.GrpcRouter;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -56,15 +57,22 @@ public class ActMain {
             MessageRouter<MessageBatch> messageRouter = factory.getMessageRouterParsedBatch();
             resources.add(messageRouter);
 
+            MessageRouter<MessageGroupBatch> groupBatchMessageRouter = factory.getMessageRouterMessageGroupBatch();
+            resources.add(groupBatchMessageRouter);
+
+            Configuration configuration = factory.getCustomConfiguration(Configuration.class);
+
             SubscriptionManagerImpl subscriptionManager = new SubscriptionManagerImpl();
             SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
             resources.add(subscriberMonitor::unsubscribe);
 
             ActHandler actHandler = new ActHandler(
                     messageRouter,
+                    groupBatchMessageRouter,
                     subscriptionManager,
                     factory.getEventBatchRouter(),
-                    grpcRouter.getService(Check1Service.class)
+                    grpcRouter.getService(Check1Service.class),
+                    configuration
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             resources.add(actServer::stop);
