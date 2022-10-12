@@ -66,20 +66,20 @@ public class EventUtils {
                 .build();
     }
 
-    static class MessageTableColumn implements IColumn {
-        public final String fieldValue;
-
-        public MessageTableColumn(String fieldValue) {
-            this.fieldValue = fieldValue;
-        }
-    }
-
     public static EventID generateID() {
         return EventID.newBuilder().setId(UUID.randomUUID().toString()).build();
     }
 
     public static ByteString toEventBody(String text) {
         return ByteString.copyFrom(format("[{\"data\":\"%s\", \"type\":\"message\" } ]", text).getBytes(StandardCharsets.UTF_8));
+    }
+
+    static class MessageTableColumn implements IColumn {
+        public final String fieldValue;
+
+        public MessageTableColumn(String fieldValue) {
+            this.fieldValue = fieldValue;
+        }
     }
 
 }

@@ -33,11 +33,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -63,7 +62,6 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
-import com.exactpro.th2.common.grpc.AnyMessage;
 import com.exactpro.th2.common.grpc.Checkpoint;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
@@ -72,7 +70,6 @@ import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.grpc.MessageGroup;
 import com.exactpro.th2.common.grpc.MessageGroupBatch;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageMetadata;
@@ -80,6 +77,8 @@ import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
+import com.exactpro.th2.common.utils.event.SingleEventBatcher;
+import com.exactpro.th2.common.utils.message.MessageBatcher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -92,6 +91,7 @@ import io.grpc.stub.StreamObserver;
 
 public class ActHandler extends ActImplBase {
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
+    private static final int CORE_POOL_SIZE = 10;
 
     private final Check1Service check1Service;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
@@ -99,6 +99,8 @@ public class ActHandler extends ActImplBase {
     private final MessageRouter<MessageGroupBatch> groupBatchMessageRouter;
     private final SubscriptionManager subscriptionManager;
     private final Configuration config;
+    private final SingleEventBatcher eventBatcher;
+    private final MessageBatcher messageBatcher;
 
     ActHandler(
             MessageRouter<MessageBatch> router,
@@ -114,6 +116,20 @@ public class ActHandler extends ActImplBase {
         this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
         this.config = configuration;
         this.groupBatchMessageRouter = groupBatchMessageRouter;
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(CORE_POOL_SIZE);
+
+        eventBatcher = new SingleEventBatcher(config.getMaxBatchSizeCount(), config.getMaxFlushTime(), executor, eventBatch -> {
+            try {
+                eventBatchMessageRouter.sendAll(eventBatch, "event");
+            } catch (IOException e) {
+                LOGGER.error("Failed to send messages", e);
+            }
+        });
+
+        messageBatcher = new MessageBatcher(config.getMaxBatchSizeCount(), config.getMaxFlushTime(),
+                message -> message.getMetadata().getId().getConnectionId().getSessionAlias(), executor,
+                throwable -> LOGGER.error("Failed to send messages", throwable),
+                messageGroupBatch -> groupBatchMessageRouter.sendAll(messageGroupBatch, "parsed", "publish"));
     }
 
     private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
@@ -181,18 +197,20 @@ public class ActHandler extends ActImplBase {
         }
     }
 
-    private com.exactpro.th2.common.grpc.Event createParentEvent(MultiSendRequest request, String actName, long actionStartTimestamp, EventID id, Set<String> aliases) {
-        StringBuilder stringBuilder = new StringBuilder().append("Request executed for aliases:").append("\\n");
-        for (String alias : aliases) {
-            stringBuilder.append(alias).append("\\n");
-        }
+    private com.exactpro.th2.common.grpc.Event createParentEvent(MultiSendRequest request, String actName, long actionStartTimestamp, EventID id) {
+        // this part is cosmetic but requires a loop for each message, do we need it ?
+        //        StringBuilder stringBuilder = new StringBuilder().append("Request executed for aliases:").append("\\n");
+        //        for (Message message : request.getMessagesList()) {
+        //            stringBuilder.append(message.getMetadata().getId().getConnectionId().getSessionAlias()).append("\\n");
+        //        }
+
         return com.exactpro.th2.common.grpc.Event.newBuilder()
                 .setStartTimestamp(Timestamps.fromMillis(actionStartTimestamp))
                 .setParentId(request.getParentEventId())
                 .setId(id)
                 .setName(format("%s for %d messages ", actName, request.getMessagesCount()))
                 .setType("act_" + actName)
-                .setBody(EventUtils.toEventBody(stringBuilder.toString()))
+                //.setBody(EventUtils.toEventBody(stringBuilder.toString()))
                 .setEndTimestamp(Timestamps.fromMillis(System.currentTimeMillis()))
                 .build();
     }
@@ -206,39 +224,18 @@ public class ActHandler extends ActImplBase {
             }
             EventID parentId = EventUtils.generateID();
             Checkpoint checkpoint = registerCheckPoint(parentId);
+            String actName = "multiSendMessage";
+            eventBatcher.onEvent(createParentEvent(request, actName, actionStartTimestamp, parentId));
 
-            Collection<com.exactpro.th2.common.grpc.Event> eventsToStore = new ArrayList<>();
-            Collection<MessageGroup> messagesToSend = new ArrayList<>();
-            Set<String> aliases = new HashSet<>();
             for (Message message : request.getMessagesList()) {
                 com.exactpro.th2.common.grpc.Event eventToStore = createSendMessageEvent(message, parentId);
-                eventsToStore.add(eventToStore);
-                aliases.add(message.getMetadata().getId().getConnectionId().getSessionAlias());
-                messagesToSend.add(MessageGroup.newBuilder().addMessages(AnyMessage.newBuilder()
-                        .setMessage(Message.newBuilder(message).setParentEventId(eventToStore.getId())
-                                .build()).build()).build());
+                eventBatcher.onEvent(eventToStore);
+                messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(eventToStore.getId()));
             }
 
-            String actName = "multiSendMessage";
             if (Context.current().isCancelled()) {
                 LOGGER.warn("'{}' request cancelled by client", actName);
                 sendMessageErrorResponse(responseObserver, "Request has been cancelled by client");
-            }
-
-            try {
-                //TODO: split to maxBatchSize
-                MessageGroupBatch messageGroupBatch = MessageGroupBatch.newBuilder()
-                        .addAllGroups(messagesToSend)
-                        .build();
-                groupBatchMessageRouter.sendAll(messageGroupBatch);
-                EventBatch eventBatch = EventBatch.newBuilder()
-                        .addEvents(createParentEvent(request, actName, actionStartTimestamp, parentId, aliases))
-                        .addAllEvents(eventsToStore)
-                        .build();
-                eventBatchMessageRouter.sendAll(eventBatch);
-            } catch (Exception ex) {
-                createAndStoreErrorEvent(actName, ex.getMessage(), Instant.now(), parentId);
-                throw ex;
             }
 
             SendMessageResponse response = SendMessageResponse.newBuilder()
@@ -252,7 +249,7 @@ public class ActHandler extends ActImplBase {
             LOGGER.error("Failed to send {} messages.", request.getMessagesCount(), e);
             sendMessageErrorResponse(responseObserver, "Send messages failed. Error: " + e.getMessage());
         } finally {
-            LOGGER.debug("Sending {} messages has been finished in {}", request.getMessagesCount(), System.currentTimeMillis() - actionStartTimestamp);
+            LOGGER.info("Sending {} messages has been finished in {}ms.", request.getMessagesCount(), System.currentTimeMillis() - actionStartTimestamp);
         }
     }
 
@@ -424,13 +421,10 @@ public class ActHandler extends ActImplBase {
 
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
-        try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
-            LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
-            return protoEvent.getId();
-        } catch (IOException e) {
-            throw new RuntimeException("Can not send event = " + protoEvent.getId().getId(), e);
-        }
+        //eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
+        eventBatcher.onEvent(protoEvent);
+        LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+        return protoEvent.getId();
     }
 
     private void createAndStoreNoResponseEvent(String actName, NoResponseBodySupplier noResponseBodySupplier,
@@ -536,19 +530,18 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("Sending the message started");
 
-            //May be use in future for filtering
-            //request.getConnectionId().getSessionAlias();
-            messageRouter.send(MessageBatch.newBuilder()
-                    .addMessages(Message.newBuilder(message)
-                            .setParentEventId(parentEventId)
-                            .build())
-                    .build());
-            //TODO remove after solving issue TH2-217
-            //TODO process response
-            EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(message, parentEventId))
-                    .build();
-            eventBatchMessageRouter.send(eventBatch, "publish", "event");
+            //            messageRouter.send(MessageBatch.newBuilder()
+            //                    .addMessages(Message.newBuilder(message)
+            //                            .setParentEventId(parentEventId)
+            //                            .build())
+            //                    .build());
+            messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(parentEventId));
+
+            //            EventBatch eventBatch = EventBatch.newBuilder()
+            //                    .addEvents(createSendMessageEvent(message, parentEventId))
+            //                    .build();
+            //            eventBatchMessageRouter.send(eventBatch, "publish", "event");
+            eventBatcher.onEvent(createSendMessageEvent(message, parentEventId));
         } finally {
             LOGGER.debug("Sending the message ended");
         }
@@ -593,7 +586,8 @@ public class ActHandler extends ActImplBase {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Try to store event: {}", toDebugMessage(eventRequest));
             }
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event");
+            //eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event");
+            eventBatcher.onEvent(eventRequest);
         } catch (Exception e) {
             LOGGER.error("Could not store event", e);
         }
