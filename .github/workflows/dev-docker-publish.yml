@@ -13,6 +13,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-20.04
+    outputs:
+      version: ${{ steps.release_ver.outputs.value }}
     steps:
       - uses: actions/checkout@v2
       # Prepare custom build version
@@ -62,4 +64,10 @@ jobs:
           labels: |
             com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.ver.outputs.value }}
             protobuf-description-base64=${{ steps.proto_json.outputs.DESCRIPTION_JSON }}
+  trivy-scan-job:
+    uses: th2-net/.github/.github/workflows/trivy-scan-table.yml@main
+    needs: [build]
+    with:
+      image-path: ghcr.io/${{ github.repository }}:${{ build.outputs.release }}
+      vuln-type: 'library'
 
