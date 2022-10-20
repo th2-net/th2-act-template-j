@@ -16,6 +16,12 @@ plugins {
     id 'java'
     id 'java-library'
     id 'application'
+    id "org.owasp.dependencycheck" version "7.3.0"
+}
+
+dependencyCheck {
+    format='HTML'
+    failBuildOnCVSS=5
 }
 
 apply plugin: 'java'
