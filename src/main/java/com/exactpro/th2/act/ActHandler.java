@@ -33,10 +33,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -62,25 +67,31 @@ import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
 import com.exactpro.th2.common.event.bean.builder.MessageBuilder;
 import com.exactpro.th2.common.event.bean.builder.RowBuilder;
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder;
+import com.exactpro.th2.common.grpc.AnyMessage;
 import com.exactpro.th2.common.grpc.Checkpoint;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventID;
+import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.ListValueOrBuilder;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageBatch;
+import com.exactpro.th2.common.grpc.MessageGroup;
 import com.exactpro.th2.common.grpc.MessageGroupBatch;
+import com.exactpro.th2.common.grpc.MessageGroupBatch.Builder;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageMetadata;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
+import com.exactpro.th2.common.schema.message.MessageListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.utils.event.SingleEventBatcher;
 import com.exactpro.th2.common.utils.message.MessageBatcher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import com.google.protobuf.util.Timestamps;
@@ -92,6 +103,7 @@ import io.grpc.stub.StreamObserver;
 public class ActHandler extends ActImplBase {
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
     private static final int CORE_POOL_SIZE = 10;
+    private static final String MATCH_FIELD_NAME = "match";
 
     private final Check1Service check1Service;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
@@ -198,39 +210,134 @@ public class ActHandler extends ActImplBase {
     }
 
     private com.exactpro.th2.common.grpc.Event createParentEvent(MultiSendRequest request, String actName, long actionStartTimestamp, EventID id) {
-        // this part is cosmetic but requires a loop for each message, do we need it ?
-        //        StringBuilder stringBuilder = new StringBuilder().append("Request executed for aliases:").append("\\n");
-        //        for (Message message : request.getMessagesList()) {
-        //            stringBuilder.append(message.getMetadata().getId().getConnectionId().getSessionAlias()).append("\\n");
-        //        }
-
         return com.exactpro.th2.common.grpc.Event.newBuilder()
                 .setStartTimestamp(Timestamps.fromMillis(actionStartTimestamp))
                 .setParentId(request.getParentEventId())
                 .setId(id)
                 .setName(format("%s for %d messages ", actName, request.getMessagesCount()))
                 .setType("act_" + actName)
-                //.setBody(EventUtils.toEventBody(stringBuilder.toString()))
                 .setEndTimestamp(Timestamps.fromMillis(System.currentTimeMillis()))
+                .build();
+    }
+
+    private void sendMessagesIgnoringOrder(MultiSendRequest request, EventID parentId) throws JsonProcessingException {
+        for (Message message : request.getMessagesList()) {
+            com.exactpro.th2.common.grpc.Event eventToStore = createSendMessageEvent(message, parentId);
+            eventBatcher.onEvent(eventToStore);
+            messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(eventToStore.getId()));
+        }
+    }
+
+    private void sendMessagesWithOrder(MultiSendRequest request, EventID parentId, long stopTime) throws IOException, InterruptedException {
+        Collection<Message> messagesToSend = new ArrayList<>();
+        String lastAlias = "";
+        for (Message message : request.getMessagesList()) {
+            String currentAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
+            if (!lastAlias.isEmpty() && !lastAlias.equals(currentAlias)) {
+                sendGroupBatcWithEcho(messagesToSend, stopTime);
+                messagesToSend.clear();
+            }
+            if (System.currentTimeMillis() >= stopTime) {
+                throw new InterruptedException("Sending interrupted by timeout at message:\n " + shortDebugString(message) + '\n'
+                        + "Possible problems and solutions:\n"
+                        + "1) Check links and filters on pins for this session alias.\n act->codec(encoder_in)->conn(to_send) and conn(second)->codec(decoder_in)->act(from_codec)\n"
+                        + "2) Check codec logs/events. Maybe this message does not corresponds your dictionary.\n"
+                        + "3) Check conn logs/events. Maybe conn can't send this message e.g. session is closed.");
+            }
+            com.exactpro.th2.common.grpc.Event eventToStore = createSendMessageEvent(message, parentId);
+            eventBatcher.onEvent(eventToStore);
+            messagesToSend.add(Message.newBuilder(message).setParentEventId(eventToStore.getId()).build());
+            lastAlias = currentAlias;
+        }
+        sendGroupBatcWithEcho(messagesToSend, stopTime);
+        messagesToSend.clear();
+    }
+
+    private void sendGroupBatcWithEcho(Iterable<? extends Message> messagesToSend, long stopTime) throws IOException {
+        Lock responseLock = new ReentrantLock();
+        Condition condition = responseLock.newCondition();
+        Collection<String> sentIDS = new HashSet<>();
+        MessageListener<MessageBatch> listener = new MessageListener<>() {
+            @Override
+            public void handler(String consumerTag, MessageBatch message) {
+                responseLock.lock();
+                try {
+                    for (Message msg : message.getMessagesList()) {
+                        sentIDS.remove(msg.getParentEventId().getId());
+                        if (sentIDS.isEmpty()) {
+                            condition.signalAll();
+                        }
+                    }
+                } finally {
+                    responseLock.unlock();
+                }
+            }
+        };
+        Builder batch = MessageGroupBatch.newBuilder();
+        for (Message message : messagesToSend) {
+            batch.addGroups(MessageGroup.newBuilder().addMessages(AnyMessage.newBuilder().setMessage(message).build()).build());
+            sentIDS.add(message.getParentEventId().getId());
+        }
+        try {
+            responseLock.lock();
+            subscriptionManager.register(Direction.SECOND, listener);
+            groupBatchMessageRouter.sendAll(batch.build(), "parsed", "publish");
+            condition.await(stopTime - System.currentTimeMillis(), MILLISECONDS);
+        } catch (IOException | InterruptedException e) {
+            LOGGER.error("Sending failed:", e.getCause());
+        } finally {
+            responseLock.unlock();
+            subscriptionManager.unregister(Direction.SECOND, listener);
+            if (sentIDS.isEmpty()) {
+                LOGGER.debug("Messages for alias {} are sent successfully.", messagesToSend.iterator().next().getMetadata().getId().getConnectionId().getSessionAlias());
+            } else {
+                LOGGER.error("Can't find echo for messages {} ", sentIDS);
+                for (String eventID : sentIDS) {
+                    eventBatcher.onEvent(createUnableToFindEcho(EventID.newBuilder().setId(eventID).build()));
+                }
+            }
+        }
+    }
+
+    private com.exactpro.th2.common.grpc.Event createUnableToFindEcho(EventID parent) {
+        return com.exactpro.th2.common.grpc.Event.newBuilder()
+                .setType("actError")
+                .setId(EventID.newBuilder().setId(UUID.randomUUID().toString()).build())
+                .setParentId(parent)
+                .setStatus(EventStatus.FAILED)
+                .setStartTimestamp(Timestamps.fromMillis(System.currentTimeMillis()))
+                .setName("Can't find echo. This message may not have been sent.")
+                .build();
+    }
+
+    private com.exactpro.th2.common.grpc.Event createUnableToSendEvent(EventID parent, String reason) {
+        return com.exactpro.th2.common.grpc.Event.newBuilder()
+                .setType("actError")
+                .setId(EventID.newBuilder().setId(UUID.randomUUID().toString()).build())
+                .setParentId(parent)
+                .setStatus(EventStatus.FAILED)
+                .setStartTimestamp(Timestamps.fromMillis(System.currentTimeMillis()))
+                .setName("Unable to send messages")
+                .setBody(ByteString.copyFromUtf8(String.format("[{\"data\":\"%s\", \"type\":\"message\" } ]", reason.replace("\n", "\\n").replace('"', '\''))))
                 .build();
     }
 
     @Override
     public void multiSendMessage(MultiSendRequest request, StreamObserver<SendMessageResponse> responseObserver) {
         long actionStartTimestamp = System.currentTimeMillis();
+        long stopTime = actionStartTimestamp + getTimeout(Context.current().getDeadline());
+        EventID parentId = EventUtils.generateID();
         try {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Sending  messages request: " + shortDebugString(request));
             }
-            EventID parentId = EventUtils.generateID();
             Checkpoint checkpoint = registerCheckPoint(parentId);
             String actName = "multiSendMessage";
             eventBatcher.onEvent(createParentEvent(request, actName, actionStartTimestamp, parentId));
-
-            for (Message message : request.getMessagesList()) {
-                com.exactpro.th2.common.grpc.Event eventToStore = createSendMessageEvent(message, parentId);
-                eventBatcher.onEvent(eventToStore);
-                messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(eventToStore.getId()));
+            if (request.getSkipOrder()) {
+                sendMessagesIgnoringOrder(request, parentId);
+            } else {
+                sendMessagesWithOrder(request, parentId, stopTime);
             }
 
             if (Context.current().isCancelled()) {
@@ -245,8 +352,9 @@ public class ActHandler extends ActImplBase {
             responseObserver.onNext(response);
             responseObserver.onCompleted();
 
-        } catch (RuntimeException | IOException e) {
-            LOGGER.error("Failed to send {} messages.", request.getMessagesCount(), e);
+        } catch (RuntimeException | IOException | InterruptedException e) {
+            LOGGER.error("Failed to send {} messages.", request.getMessagesCount(), e.getMessage());
+            eventBatcher.onEvent(createUnableToSendEvent(parentId, e.getMessage()));
             sendMessageErrorResponse(responseObserver, "Send messages failed. Error: " + e.getMessage());
         } finally {
             LOGGER.info("Sending {} messages has been finished in {}ms.", request.getMessagesCount(), System.currentTimeMillis() - actionStartTimestamp);
@@ -530,12 +638,12 @@ public class ActHandler extends ActImplBase {
         try {
             LOGGER.debug("Sending the message started");
 
-            //            messageRouter.send(MessageBatch.newBuilder()
-            //                    .addMessages(Message.newBuilder(message)
-            //                            .setParentEventId(parentEventId)
-            //                            .build())
-            //                    .build());
-            messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(parentEventId));
+            messageRouter.send(MessageBatch.newBuilder()
+                    .addMessages(Message.newBuilder(message)
+                            .setParentEventId(parentEventId)
+                            .build())
+                    .build());
+            //messageBatcher.onMessage(Message.newBuilder(message).setParentEventId(parentEventId));
 
             //            EventBatch eventBatch = EventBatch.newBuilder()
             //                    .addEvents(createSendMessageEvent(message, parentEventId))

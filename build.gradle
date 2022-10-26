@@ -83,7 +83,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:3.41.1'
     implementation 'com.exactpro.th2:common-utils:0.0.1-java-interop-3226223691-SNAPSHOT'
-    implementation 'com.exactpro.th2:grpc-act-template:3.10.0-TH2-4293-3219783159-SNAPSHOT'
+    implementation 'com.exactpro.th2:grpc-act-template:3.10.0-TH2-4293-3311383108-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:3.5.1'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
