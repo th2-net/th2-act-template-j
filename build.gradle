@@ -21,12 +21,6 @@ plugins {
     id 'signing'
 }
 
-apply plugin: 'java'
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
-apply plugin: 'application'
-apply plugin: 'com.palantir.docker'
-
 apply plugin: 'th2plugin'
 
 parameters {
@@ -88,7 +82,6 @@ jar {
     }
 }
 
-// conditionals for publications
 tasks.withType(PublishToMavenRepository) {
     onlyIf {
         (repository == publishing.repositories.nexus &&
