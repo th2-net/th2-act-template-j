@@ -16,22 +16,21 @@
 
 package com.exactpro.th2.act.rules;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
-
-import javax.annotation.Nullable;
-
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.exactpro.th2.act.CheckRule;
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.grpc.MessageOrBuilder;
 import com.google.protobuf.TextFormat;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class AbstractSingleConnectionRule implements CheckRule {
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractSingleConnectionRule.class);
@@ -75,7 +74,7 @@ public abstract class AbstractSingleConnectionRule implements CheckRule {
 
     protected abstract boolean checkMessageFromConnection(Message message);
 
-    private boolean checkSessionAlias(Message message) {
+    private boolean checkSessionAlias(MessageOrBuilder message) {
         var actualSessionAlias = message.getMetadata().getId().getConnectionId().getSessionAlias();
         return requestConnId.getSessionAlias().equals(actualSessionAlias);
     }

@@ -22,6 +22,7 @@ import com.exactpro.th2.common.grpc.ConnectionID
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.schema.message.DeliveryMetadata
 import com.nhaarman.mockitokotlin2.mock
 import com.nhaarman.mockitokotlin2.verify
 import org.junit.jupiter.api.Test
@@ -38,6 +39,7 @@ class TestBiDirectionalMessageReceiver {
             .build()
     private val manager = SubscriptionManagerImpl()
     private val monitor: ResponseMonitor = mock { }
+    private val deliveryMetadata: DeliveryMetadata = mock {  }
 
     private fun receiver(outgoing: CheckRule, incomingSupplier: (Message) -> CheckRule): AbstractMessageReceiver = BiDirectionalMessageReceiver(
             manager,
@@ -53,8 +55,8 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageB).build())
         }
 
         expect {
@@ -74,8 +76,8 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageB, connectionID) }
         receiver.use {
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageA).build())
         }
 
         expect {
@@ -96,9 +98,9 @@ class TestBiDirectionalMessageReceiver {
 
         val receiver = receiver(IdentityRule(messageA, connectionID)) { IdentityRule(messageC, connectionID) }
         receiver.use {
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageB).build())
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageA).build())
-            manager.handle("", MessageBatch.newBuilder().addMessages(messageC).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageB).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageA).build())
+            manager.handle(deliveryMetadata, MessageBatch.newBuilder().addMessages(messageC).build())
         }
 
         expect {

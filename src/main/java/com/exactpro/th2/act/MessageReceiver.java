@@ -1,5 +1,5 @@
-/******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.act;
 
 import java.util.Collection;
@@ -20,6 +20,7 @@ import java.util.Objects;
 
 import javax.annotation.Nullable;
 
+import com.exactpro.th2.common.schema.message.DeliveryMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +69,7 @@ public class MessageReceiver extends AbstractMessageReceiver {
         return checkRule.processedIDs();
     }
 
-    private void processIncomingMessages(String consumingTag, MessageBatch batch) {
+    private void processIncomingMessages(DeliveryMetadata deliveryMetadata, MessageBatch batch) {
         try {
             LOGGER.debug("Message received batch, size {}", batch.getSerializedSize());
             for (Message message : batch.getMessagesList()) {

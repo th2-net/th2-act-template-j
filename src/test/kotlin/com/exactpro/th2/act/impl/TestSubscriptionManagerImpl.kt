@@ -18,6 +18,7 @@ package com.exactpro.th2.act.impl
 import com.exactpro.th2.act.util.createDefaultMessage
 import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.MessageBatch
+import com.exactpro.th2.common.schema.message.DeliveryMetadata
 import com.exactpro.th2.common.schema.message.MessageListener
 import com.nhaarman.mockitokotlin2.*
 import org.junit.jupiter.api.Assertions
@@ -28,6 +29,7 @@ import org.junit.jupiter.params.provider.EnumSource
 class TestSubscriptionManagerImpl {
 
     private val manager = SubscriptionManagerImpl()
+    private val deliveryMetadata: DeliveryMetadata = mock {  }
 
     @ParameterizedTest
     @EnumSource(value = Direction::class, mode = EnumSource.Mode.EXCLUDE, names = ["UNRECOGNIZED"])
@@ -41,7 +43,7 @@ class TestSubscriptionManagerImpl {
         val batch = MessageBatch.newBuilder()
                 .addMessages(createDefaultMessage(direction = direction))
                 .build()
-        manager.handle("", batch)
+        manager.handle(deliveryMetadata, batch)
 
         Assertions.assertAll(
                 listeners.map { (dir, listener) ->
@@ -68,7 +70,7 @@ class TestSubscriptionManagerImpl {
         val batch = MessageBatch.newBuilder()
                 .addMessages(createDefaultMessage(direction = direction))
                 .build()
-        manager.handle("", batch)
+        manager.handle(deliveryMetadata, batch)
 
         verify(listener, never()).handle(any(), any())
     }

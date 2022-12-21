@@ -12,7 +12,7 @@ buildscript {
 
 plugins {
     id 'com.palantir.docker' version '0.25.0'
-    id 'org.jetbrains.kotlin.jvm' version '1.5.30'
+    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
     id 'java'
     id 'java-library'
     id 'application'
@@ -31,10 +31,6 @@ parameters {
     outputDirectory = "."
 }
 
-ext {
-    sharedDir           = file("${project.rootDir}/shared")
-}
-
 group = 'com.exactpro.th2'
 version = release_version
 
@@ -51,10 +47,6 @@ compileTestKotlin {
 
 repositories {
     mavenLocal()
-    maven {
-        name 'MavenLocal'
-        url sharedDir
-    }
     mavenCentral()
     maven {
         name 'Sonatype_snapshots'
@@ -86,22 +78,25 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.2.0')
+    api platform('com.exactpro.th2:bom:4.0.2')
 
-    implementation 'com.exactpro.th2:common:4.0.0-th2-2150-books-pages-2635632236-SNAPSHOT'
+    implementation ('com.exactpro.th2:common:5.0.0-dev-version-5-3539375667-SNAPSHOT') {
+        because('senging to direct queues')
+        exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
+        exclude group: 'com.exactpro.th2', module: 'cradle-core'
+        exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
+    }
     implementation 'com.exactpro.th2:grpc-act-template:4.0.0-th2-2150-books-pages-2634811682-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:4.0.0-th2-2150-books-pages-1628253419-SNAPSHOT'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
 
-    implementation "org.slf4j:slf4j-log4j12"
     implementation "org.slf4j:slf4j-api"
+    implementation "org.apache.commons:commons-lang3"
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
-    testImplementation "io.strikt:strikt-core:0.30.0"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0'
+    testImplementation 'io.strikt:strikt-core:0.34.1'
     testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
 }
 

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.exactpro.th2.common.schema.message.DeliveryMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,28 +57,28 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
     }
 
     @Override
-    public void handle(String s, MessageBatch messageBatch) {
-        if (messageBatch.getMessagesCount() < 0) {
+    public void handle(DeliveryMetadata deliveryMetadata, MessageBatch message) {
+        if (message.getMessagesCount() < 0) {
             if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Empty batch received {}", shortDebugString(messageBatch));
+                LOGGER.warn("Empty batch received {}", shortDebugString(message));
             }
             return;
         }
-        Direction direction = messageBatch.getMessages(0).getMetadata().getId().getDirection();
+        Direction direction = message.getMessages(0).getMetadata().getId().getDirection();
         List<MessageListener<MessageBatch>> listeners = callbacks.get(direction);
         if (listeners == null) {
             if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(messageBatch));
+                LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(message));
             }
             return;
         }
 
         for (MessageListener<MessageBatch> listener : listeners) {
             try {
-                listener.handle(s, messageBatch);
+                listener.handle(deliveryMetadata, message);
             } catch (Exception e) {
                 if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(messageBatch), e);
+                    LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(message), e);
                 }
             }
         }

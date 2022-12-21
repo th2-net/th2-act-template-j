@@ -28,6 +28,8 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import com.exactpro.th2.common.grpc.MessageBatchOrBuilder;
+import com.exactpro.th2.common.schema.message.DeliveryMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,10 +39,11 @@ import com.exactpro.th2.common.grpc.MessageBatch;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageListener;
 
+@SuppressWarnings("UseOfConcreteClass")
 public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
 
     private enum State {
-        START, OUTGOING_MATCHED, INCOMING_MATCHED;
+        START, OUTGOING_MATCHED, INCOMING_MATCHED
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BiDirectionalMessageReceiver.class);
@@ -84,7 +87,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         if (incoming == null || incoming.processedIDs().isEmpty()) {
             return outgoingRule.processedIDs();
         }
-        var messageIDS = new ArrayList<MessageID>(outgoingRule.processedIDs().size() + incoming.processedIDs().size());
+        Collection<MessageID> messageIDS = new ArrayList<>(outgoingRule.processedIDs().size() + incoming.processedIDs().size());
         messageIDS.addAll(outgoingRule.processedIDs());
         messageIDS.addAll(incoming.processedIDs());
         return messageIDS;
@@ -96,7 +99,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         subscriptionManager.unregister(Direction.SECOND, outgoingListener);
     }
 
-    private void processOutgoingMessages(String consumingTag, MessageBatch batch) {
+    private void processOutgoingMessages(DeliveryMetadata deliveryMetadata, MessageBatchOrBuilder batch) {
         State current = state;
         if (current == State.OUTGOING_MATCHED || current == State.INCOMING_MATCHED) {
             // already has found everything for outgoing messages
@@ -116,7 +119,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         }
     }
 
-    private void processIncomingMessages(String consumingTag, MessageBatch batch) {
+    private void processIncomingMessages(DeliveryMetadata deliveryMetadata, MessageBatch batch) {
         if (state == State.START) {
             if (LOGGER.isTraceEnabled()) {
                 LOGGER.trace("Buffering message batch: {}", shortDebugString(batch));
@@ -155,7 +158,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         return false;
     }
 
-    private boolean findMatchInBuffer(Queue<MessageBatch> buffer, CheckRule incomingRule) {
+    private static boolean findMatchInBuffer(Queue<MessageBatch> buffer, CheckRule incomingRule) {
         MessageBatch batch;
         while ((batch = buffer.poll()) != null) {
             if (anyMatches(batch, incomingRule)) {
@@ -179,7 +182,7 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         });
     }
 
-    private boolean anyMatches(MessageBatch batch, CheckRule rule) {
+    private static boolean anyMatches(MessageBatchOrBuilder batch, CheckRule rule) {
         for (Message message : batch.getMessagesList()) {
             if (rule.onMessage(message)) {
                 return true;
