@@ -15,28 +15,23 @@
  */
 package com.exactpro.th2.act;
 
-import java.util.Collection;
-import java.util.Objects;
-
-import javax.annotation.Nullable;
-
-import com.exactpro.th2.common.schema.message.DeliveryMetadata;
+import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.google.protobuf.TextFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.schema.message.MessageListener;
-import com.google.protobuf.TextFormat;
+import javax.annotation.Nullable;
+import java.util.Collection;
+import java.util.Objects;
 
 public class MessageReceiver extends AbstractMessageReceiver {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageReceiver.class);
 
     private final SubscriptionManager subscriptionManager;
     private final Direction direction;
-    private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
+    private final Listener callback = this::processIncomingMessages;
     private final CheckRule checkRule;
     private volatile Message firstMatch;
 
@@ -69,19 +64,20 @@ public class MessageReceiver extends AbstractMessageReceiver {
         return checkRule.processedIDs();
     }
 
-    private void processIncomingMessages(DeliveryMetadata deliveryMetadata, MessageBatch batch) {
+    private void processIncomingMessages(Message message) {
         try {
-            LOGGER.debug("Message received batch, size {}", batch.getSerializedSize());
-            for (Message message : batch.getMessagesList()) {
-                if (hasMatch()) {
-                    LOGGER.debug("The match was already found. Skip batch checking");
-                    break;
-                }
-                if (checkRule.onMessage(message)) {
-                    firstMatch = message;
-                    signalAboutReceived();
-                    LOGGER.debug("Found first match '{}'. Skip other messages", TextFormat.shortDebugString(message));
-                    break;
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Message received message, size {} bytes", message.getSerializedSize());
+            }
+            if (hasMatch()) {
+                LOGGER.debug("The match was already found. Skip message checking");
+                return;
+            }
+            if (checkRule.onMessage(message)) {
+                firstMatch = message;
+                signalAboutReceived();
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Found first match '{}'", TextFormat.shortDebugString(message));
                 }
             }
         } catch (RuntimeException e) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.exactpro.th2.act.Listener;
+import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.schema.message.DeliveryMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,57 +37,63 @@ import com.exactpro.th2.common.schema.message.MessageListener;
 
 public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, SubscriptionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(SubscriptionManagerImpl.class);
-    private final Map<Direction, List<MessageListener<MessageBatch>>> callbacks;
+    private final Map<Direction, List<Listener>> callbacks;
 
     public SubscriptionManagerImpl() {
-        Map<Direction, List<MessageListener<MessageBatch>>> callbacks = new EnumMap<>(Direction.class);
+        Map<Direction, List<Listener>> callbacks = new EnumMap<>(Direction.class);
         callbacks.put(Direction.FIRST, new CopyOnWriteArrayList<>());
         callbacks.put(Direction.SECOND, new CopyOnWriteArrayList<>());
         this.callbacks = Collections.unmodifiableMap(callbacks);
     }
 
     @Override
-    public void register(Direction direction, MessageListener<MessageBatch> listener) {
-        List<MessageListener<MessageBatch>> listeners = getMessageListeners(direction);
+    public void register(Direction direction, Listener listener) {
+        List<Listener> listeners = getMessageListeners(direction);
         listeners.add(listener);
     }
 
     @Override
-    public boolean unregister(Direction direction, MessageListener<MessageBatch> listener) {
-        List<MessageListener<MessageBatch>> listeners = getMessageListeners(direction);
+    public boolean unregister(Direction direction, Listener listener) {
+        List<Listener> listeners = getMessageListeners(direction);
         return listeners.remove(listener);
     }
 
     @Override
-    public void handle(DeliveryMetadata deliveryMetadata, MessageBatch message) {
-        if (message.getMessagesCount() < 0) {
+    public void handle(
+            @SuppressWarnings("UseOfConcreteClass") DeliveryMetadata deliveryMetadata,
+            @SuppressWarnings("ParameterNameDiffersFromOverriddenParameter") MessageBatch messageBatch
+    ) {
+        if (messageBatch.getMessagesCount() < 0) {
             if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Empty batch received {}", shortDebugString(message));
-            }
-            return;
-        }
-        Direction direction = message.getMessages(0).getMetadata().getId().getDirection();
-        List<MessageListener<MessageBatch>> listeners = callbacks.get(direction);
-        if (listeners == null) {
-            if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(message));
+                LOGGER.warn("Empty batch received {}", shortDebugString(messageBatch));
             }
             return;
         }
 
-        for (MessageListener<MessageBatch> listener : listeners) {
-            try {
-                listener.handle(deliveryMetadata, message);
-            } catch (Exception e) {
-                if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(message), e);
+        for (Message message : messageBatch.getMessagesList()) {
+            Direction direction = message.getMetadata().getId().getDirection();
+            List<Listener> listeners = callbacks.get(direction);
+            if (listeners == null) {
+                if (LOGGER.isWarnEnabled()) {
+                    LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(messageBatch));
+                }
+                return;
+            }
+
+            for (Listener listener : listeners) {
+                try {
+                    listener.handle(message);
+                } catch (Exception e) {
+                    if (LOGGER.isErrorEnabled()) {
+                        LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(messageBatch), e);
+                    }
                 }
             }
         }
     }
 
-    private List<MessageListener<MessageBatch>> getMessageListeners(Direction direction) {
-        List<MessageListener<MessageBatch>> listeners = callbacks.get(direction);
+    private List<Listener> getMessageListeners(Direction direction) {
+        List<Listener> listeners = callbacks.get(direction);
         if (listeners == null) {
             throw new IllegalArgumentException("Unsupported direction " + direction);
         }
