@@ -13,7 +13,6 @@ on:
 jobs:
   prebuild-job:
     name: Prebuild Job
-    runs-on: ubuntu-20.04
     outputs:
       version: ${{ steps.release_ver.outputs.value }}
       versionNumber: ${{ steps.ver.outputs.release_version }}
