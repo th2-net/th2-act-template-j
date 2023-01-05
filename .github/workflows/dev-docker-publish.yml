@@ -11,36 +11,28 @@ on:
 
 
 jobs:
-  build:
+  prebuild-job:
+    name: Prebuild Job
+    runs-on: ubuntu-20.04
+    outputs:
+      version: ${{ steps.release_ver.outputs.value }}
+      versionNumber: ${{ steps.ver.outputs.release_version }}
+  docker-push:
+    name: Docker build and push
+    needs: [prebuild-job]
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
-      # Prepare custom build version
-      - uses: actions/setup-java@v1
-        with:
-          java-version: 11
-      - name: Get branch name
-        id: branch
-        run: echo ::set-output name=branch_name::${GITHUB_REF#refs/*/}
-      - name: Get release_version
-        id: ver
-        uses: christian-draeger/read-properties@1.0.1
-        with:
-          path: gradle.properties
-          property: release_version
-      - name: Build custom release version
-        id: release_ver
-        run: echo ::set-output name=value::"${{ steps.ver.outputs.value }}-${{ steps.branch.outputs.branch_name }}-${{ github.run_id }}"
-      - name: Show custom release version
-        run: echo ${{ steps.release_ver.outputs.value }}
       # Build and publish image
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+      - uses: actions/setup-java@v1
+        with:
+          java-version: 11
       - uses: docker/login-action@v1
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.CR_PAT }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - run: echo "::set-output name=REPOSITORY_NAME::$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')"
         id: meta
       - name: Generate .proto description json
@@ -58,8 +50,15 @@ jobs:
           build-args: |
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
             GITHUB_ACTOR=${{ github.actor }}
-          tags: ghcr.io/${{ github.repository }}:${{ steps.release_ver.outputs.value }}
+          tags: ghcr.io/${{ github.repository }}:${{ needs.prebuild-job.outputs.version }}
           labels: |
-            com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ steps.ver.outputs.value }}
+            com.exactpro.th2.${{ steps.meta.outputs.REPOSITORY_NAME }}=${{ needs.prebuild-job.outputs.versionNumber }}
             protobuf-description-base64=${{ steps.proto_json.outputs.DESCRIPTION_JSON }}
+  trivy-docker-scan:
+    name: Scan Docker image for vulnerabilities
+    if: true
+    needs: [docker-push, prebuild-job]
+    uses: th2-net/.github/.github/workflows/trivy-scan-github.yml@main
+    with:
+      image-path: ghcr.io/${{ github.repository }}:${{ needs.prebuild-job.outputs.version }}
 
