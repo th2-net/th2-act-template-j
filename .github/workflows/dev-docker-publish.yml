@@ -14,9 +14,8 @@ jobs:
   prebuild-job:
     name: Prebuild Job
     uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
-    outputs:
-      version: ${{ steps.release_ver.outputs.value }}
-      versionNumber: ${{ steps.ver.outputs.release_version }}
+    with:
+      runsOn: ubuntu-20.04
   docker-push:
     name: Docker build and push
     needs: [prebuild-job]
