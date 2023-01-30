@@ -1,4 +1,4 @@
-# th2 act template (3.7.0)
+# th2 act template (3.8.0)
 
 ## Overview
 
@@ -60,6 +60,11 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 
 ## Release Notes
+
+### 3.8.0
+
++ Update `th2-grpc-act-template` version from `3.9.0` to `3.10.0`
++ Implement `placeOrderCancelRequest` and `placeOrderCancelReplaceRequest` methods
 
 ### 3.7.0
 
