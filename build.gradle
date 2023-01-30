@@ -95,7 +95,7 @@ dependencies {
     api platform('com.exactpro.th2:bom:4.1.0')
 
     implementation 'com.exactpro.th2:common:3.44.0'
-    implementation 'com.exactpro.th2:grpc-act-template:3.9.0'
+    implementation 'com.exactpro.th2:grpc-act-template:3.10.0'
     implementation 'com.exactpro.th2:grpc-check1:3.6.0'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
