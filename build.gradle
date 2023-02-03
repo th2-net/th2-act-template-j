@@ -16,6 +16,12 @@ plugins {
     id 'java'
     id 'java-library'
     id 'application'
+    id "org.owasp.dependencycheck" version "7.4.4"
+}
+
+dependencyCheck {
+    format='HTML'
+    failBuildOnCVSS=5
 }
 
 apply plugin: 'java'
@@ -78,7 +84,7 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.0.2')
+    api platform('com.exactpro.th2:bom:4.1.0')
 
     implementation ('com.exactpro.th2:common:5.0.0-dev-version-5-3539375667-SNAPSHOT') {
         because('senging to direct queues')
@@ -91,9 +97,6 @@ dependencies {
     implementation "com.fasterxml.jackson.core:jackson-databind"
 
     implementation "org.slf4j:slf4j-api"
-    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl'
-    implementation 'org.apache.logging.log4j:log4j-1.2-api'
-    implementation 'org.apache.logging.log4j:log4j-core'
 
     implementation "org.apache.commons:commons-lang3"
 
