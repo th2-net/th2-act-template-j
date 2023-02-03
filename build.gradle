@@ -86,11 +86,11 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:4.1.0')
 
-    implementation ('com.exactpro.th2:common:5.0.0-dev-version-5-3539375667-SNAPSHOT') {
+    implementation ('com.exactpro.th2:common:5.1.0-dev-version-5-4085018593-8adee33-SNAPSHOT') {
         because('senging to direct queues')
         exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
     }
-    implementation 'com.exactpro.th2:grpc-act-template:4.0.0-th2-2150-books-pages-2634811682-SNAPSHOT'
+    implementation 'com.exactpro.th2:grpc-act-template:4.0.0-th2-2150-books-pages-4084963764-SNAPSHOT'
     implementation 'com.exactpro.th2:grpc-check1:4.0.0-th2-2150-books-pages-1628253419-SNAPSHOT'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
