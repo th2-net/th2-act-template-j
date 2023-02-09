@@ -130,13 +130,15 @@ public class ActHandler extends ActImplBase {
         this.groupBatchMessageRouter = groupBatchMessageRouter;
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(CORE_POOL_SIZE);
 
-        eventBatcher = new SingleEventBatcher(config.getMaxBatchSizeCount(), config.getMaxFlushTime(), executor, eventBatch -> {
-            try {
-                eventBatchMessageRouter.sendAll(eventBatch, "event");
-            } catch (IOException e) {
-                LOGGER.error("Failed to send messages", e);
-            }
-        });
+        eventBatcher = new SingleEventBatcher(config.getMaxBatchSizeCount(), config.getMaxFlushTime(), executor,
+                throwable -> LOGGER.error("Failed to send events", throwable),
+                eventBatch -> {
+                    try {
+                        eventBatchMessageRouter.sendAll(eventBatch, "event");
+                    } catch (IOException e) {
+                        LOGGER.error("Failed to send events", e);
+                    }
+                });
 
         messageBatcher = new MessageBatcher(config.getMaxBatchSizeCount(), config.getMaxFlushTime(),
                 message -> message.getMetadata().getId().getConnectionId().getSessionAlias(), executor,
@@ -175,9 +177,9 @@ public class ActHandler extends ActImplBase {
                 LOGGER.debug("placeOrderCancelRequest request: " + shortDebugString(request));
             }
             placeMessageFieldRule(request, responseObserver, "OrderCancelRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), 
-                    "OrderCancelReject", CheckMetadata.failOn("ClOrdID"), 
-                    "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderCancelRequest");
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"),
+                            "OrderCancelReject", CheckMetadata.failOn("ClOrdID"),
+                            "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderCancelRequest");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an OrderCancelRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an OrderCancelRequest. Error: " + e.getMessage());
@@ -193,9 +195,9 @@ public class ActHandler extends ActImplBase {
                 LOGGER.debug("placeOrderCancelReplaceRequest request: " + shortDebugString(request));
             }
             placeMessageFieldRule(request, responseObserver, "OrderCancelReplaceRequest", request.getMessage().getFieldsMap().get("ClOrdID").getSimpleValue(),
-                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"), 
-                    "OrderCancelReject", CheckMetadata.failOn("ClOrdID"), 
-                    "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderCancelReplaceRequest");
+                    ImmutableMap.of("ExecutionReport", CheckMetadata.passOn("ClOrdID"),
+                            "OrderCancelReject", CheckMetadata.failOn("ClOrdID"),
+                            "BusinessMessageReject", CheckMetadata.failOn("BusinessRejectRefID")), "placeOrderCancelReplaceRequest");
         } catch (RuntimeException | JsonProcessingException e) {
             LOGGER.error("Failed to place an OrderCancelReplaceRequest. Message = {}", request.getMessage(), e);
             sendErrorResponse(responseObserver, "Failed to place an OrderCancelReplaceRequest. Error: " + e.getMessage());
