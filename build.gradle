@@ -130,3 +130,4 @@ dockerPrepare {
 docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
+
