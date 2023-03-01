@@ -16,12 +16,18 @@ plugins {
     id 'java'
     id 'java-library'
     id 'application'
-    id "org.owasp.dependencycheck" version "7.4.4"
+    id "org.owasp.dependencycheck" version "8.1.2"
 }
 
 dependencyCheck {
-    format='HTML'
+    formats=['SARIF', 'JSON', 'HTML']
     failBuildOnCVSS=5
+
+    analyzers {
+        assemblyEnabled = false
+        nugetconfEnabled = false
+        nodeEnabled = false
+    }
 }
 
 apply plugin: 'java'
@@ -84,14 +90,14 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.1.0')
+    api platform('com.exactpro.th2:bom:4.2.0')
 
-    implementation ('com.exactpro.th2:common:5.1.0-dev-version-5-4085018593-8adee33-SNAPSHOT') {
+    implementation ('com.exactpro.th2:common:5.2.0-dev') {
         because('senging to direct queues')
         exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
     }
-    implementation 'com.exactpro.th2:grpc-act-template:4.0.0-th2-2150-books-pages-4084963764-SNAPSHOT'
-    implementation 'com.exactpro.th2:grpc-check1:4.0.0-th2-2150-books-pages-1628253419-SNAPSHOT'
+    implementation 'com.exactpro.th2:grpc-act-template:4.0.0-dev'
+    implementation 'com.exactpro.th2:grpc-check1:4.1.0-dev'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"

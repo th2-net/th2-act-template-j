@@ -1,4 +1,4 @@
-# th2 act template (4.0.0)
+# th2 act template (4.0.1)
 
 ## Overview
 
@@ -61,6 +61,9 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 ## Release Notes
 
+### 4.0.1
++ 3.9.0 merged
+
 ### 4.0.0
 
 + Update `kotlin.jvm` version from `1.3.72` to `1.5.30`
@@ -69,6 +72,13 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
     + Update `th2-grpc-act-template` version from `3.4.0` to `4.0.0`
     + Update `th2-grpc-check1` version from `3.4.2` to `4.0.0`
     
+### 3.9.0
+
++ th2-common to `3.44.1`
++ th2-bom to `4.2.0`
++ th2-grpc-check to `3.8.0`
++ grpc-check1 updated to `3.8.0`
++ updated gradle to 7.6
 ### 3.8.0
 
 + Update `th2-grpc-act-template` version from `3.9.0` to `3.10.0`
