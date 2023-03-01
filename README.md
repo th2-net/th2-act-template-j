@@ -63,9 +63,9 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 ### 3.9.0
 
-+ Added owasp dependency scan
 + th2-common to `3.44.1`
 + th2-bom to `4.2.0`
++ th2-grpc-check to `3.8.0`
 
 ### 3.8.0
 
