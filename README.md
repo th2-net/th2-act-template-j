@@ -66,7 +66,8 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 + th2-common to `3.44.1`
 + th2-bom to `4.2.0`
 + th2-grpc-check to `3.8.0`
-
++ grpc-check1 updated to `3.8.0`
++ updated gradle to 7.6
 ### 3.8.0
 
 + Update `th2-grpc-act-template` version from `3.9.0` to `3.10.0`
