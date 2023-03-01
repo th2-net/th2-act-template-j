@@ -16,12 +16,18 @@ plugins {
     id 'java'
     id 'java-library'
     id 'application'
-    id "org.owasp.dependencycheck" version "7.4.4"
+    id "org.owasp.dependencycheck" version "8.1.2"
 }
 
 dependencyCheck {
-    format='HTML'
+    formats=['SARIF', 'JSON', 'HTML']
     failBuildOnCVSS=5
+
+    analyzers {
+        assemblyEnabled = false
+        nugetconfEnabled = false
+        nodeEnabled = false
+    }
 }
 
 apply plugin: 'java'
@@ -92,11 +98,11 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.1.0')
+    api platform('com.exactpro.th2:bom:4.2.0')
 
-    implementation 'com.exactpro.th2:common:3.44.0'
+    implementation 'com.exactpro.th2:common:3.44.1'
     implementation 'com.exactpro.th2:grpc-act-template:3.10.0'
-    implementation 'com.exactpro.th2:grpc-check1:3.6.0'
+    implementation 'com.exactpro.th2:grpc-check1:3.8.0'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
