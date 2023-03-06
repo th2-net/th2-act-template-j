@@ -18,14 +18,15 @@ package com.exactpro.th2.act;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 import org.slf4j.Logger;
@@ -49,10 +50,11 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     private final CheckRule outgoingRule;
     private final Function<Message, CheckRule> incomingRuleSupplier;
 
-    private final Queue<MessageBatch> incomingBuffer = new LinkedList<>();
+    private final Queue<Message> incomingBuffer = new ArrayDeque<>();
     private final MessageListener<MessageBatch> incomingListener = this::processIncomingMessages;
     private final MessageListener<MessageBatch> outgoingListener = this::processOutgoingMessages;
     private final AtomicReference<CheckRule> incomingRule = new AtomicReference<>();
+    private final Predicate<Message> incomingMessagesFilter;
 
     private volatile State state = State.START;
 
@@ -60,12 +62,14 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
             SubscriptionManager subscriptionManager,
             ResponseMonitor monitor,
             CheckRule outgoingRule,
-            Function<Message, CheckRule> incomingRuleSupplier
+            Function<Message, CheckRule> incomingRuleSupplier,
+            Predicate<Message> incomingMessagesFilter
     ) {
         super(monitor);
         this.subscriptionManager = Objects.requireNonNull(subscriptionManager, "'Subscription manager' parameter");
         this.outgoingRule = Objects.requireNonNull(outgoingRule, "'Outgoing rule' parameter");
         this.incomingRuleSupplier = Objects.requireNonNull(incomingRuleSupplier, "'Incoming rule supplier' parameter");
+        this.incomingMessagesFilter = incomingMessagesFilter == null ? x -> true : incomingMessagesFilter;
 
         subscriptionManager.register(Direction.FIRST, incomingListener);
         subscriptionManager.register(Direction.SECOND, outgoingListener);
@@ -122,7 +126,11 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
                 LOGGER.trace("Buffering message batch: {}", shortDebugString(batch));
             }
             synchronized (incomingBuffer) {
-                incomingBuffer.add(batch);
+                for (Message message : batch.getMessagesList()) {
+                    if (incomingMessagesFilter.test(message)) {
+                        incomingBuffer.add(message);
+                    }
+                }
             }
             if (state == State.START) {
                 return;
@@ -155,12 +163,10 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
         return false;
     }
 
-    private boolean findMatchInBuffer(Queue<MessageBatch> buffer, CheckRule incomingRule) {
-        MessageBatch batch;
-        while ((batch = buffer.poll()) != null) {
-            if (anyMatches(batch, incomingRule)) {
-                return true;
-            }
+    private boolean findMatchInBuffer(Queue<Message> buffer, CheckRule incomingRule) {
+        Message message;
+        while ((message = buffer.poll()) != null) {
+            if(incomingRule.onMessage(message)) return true;
         }
         return false;
     }

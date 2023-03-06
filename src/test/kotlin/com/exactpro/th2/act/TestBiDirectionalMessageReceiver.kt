@@ -45,7 +45,8 @@ class TestBiDirectionalMessageReceiver {
             manager,
             monitor,
             outgoing,
-            Function(incomingSupplier)
+            Function(incomingSupplier),
+        null
     )
 
     @Test
