@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,15 @@
  */
 package com.exactpro.th2.act.rules;
 
-import static com.google.protobuf.TextFormat.shortDebugString;
-
-import java.util.Map;
-import java.util.Objects;
-
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.utils.message.FieldNotFoundException;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.common.grpc.ConnectionID;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageOrBuilder;
-import com.exactpro.th2.common.grpc.Value;
+import java.util.Map;
+import java.util.Objects;
 
 public class FieldCheckRule extends AbstractSingleConnectionRule {
     private static final Logger LOGGER = LoggerFactory.getLogger(FieldCheckRule.class);
@@ -50,13 +46,11 @@ public class FieldCheckRule extends AbstractSingleConnectionRule {
     }
 
     @Override
-    protected boolean checkMessageFromConnection(Message message) {
-        String messageType = message.getMetadata().getMessageType();
+    protected boolean checkMessageFromConnection(MessageHolder message) {
+        String messageType = message.getMessageType();
         String fieldName = msgTypeToFieldName.get(messageType);
         if (fieldName != null) {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("Checking the message: {}", shortDebugString(message));
-            }
+            LOGGER.debug("Checking the message: {}", message);
             if (checkExpectedField(message, fieldName)) {
                 LOGGER.debug("FixCheckRule passed on {} messageType", messageType);
                 return true;
@@ -65,9 +59,12 @@ public class FieldCheckRule extends AbstractSingleConnectionRule {
         return false;
     }
 
-    private boolean checkExpectedField(MessageOrBuilder message, String fieldName) {
-        Value value = message.getFieldsMap().get(fieldName);
-        return value != null
-                && Objects.equals(expectedFieldValue, value.getSimpleValue());
+    private boolean checkExpectedField(MessageHolder message, String fieldName) {
+        try {
+            String value = message.getSimple(fieldName);
+            return Objects.equals(expectedFieldValue, value);
+        } catch (FieldNotFoundException e) {
+            return false;
+        }
     }
 }

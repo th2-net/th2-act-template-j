@@ -1,17 +1,21 @@
-# th2 act template (4.0.1)
+# th2 act template (5.0.0)
 
 ## Overview
 
-Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or other components can call these functions via gRPC.
-Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2 component type allows frequently used script logic into it and then share it between all th2 components.
+Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or
+other components can call these functions via gRPC. Act can interact with conn (Connects), hands, check1s, other acts to
+execute its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This
+th2 component type allows frequently used script logic into it and then share it between all th2 components.
 
-This project is implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+This project is implemented gRPC API described in
+the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
 
 Most of them consists of the next steps:
+
 1. Gets a gRPC request with parameters.
 2. Requests checkpoint from check1 via gRPC pin
-3. Sends the passed business message to Connect via mq pin 
-4. Waits the specific business message from Connect during specified timeout 
+3. Sends the passed business message to Connect via mq pin
+4. Waits the specific business message from Connect during specified timeout
 5. Returns responded business message with checkpoint
 
 ![picture](scheme.png)
@@ -54,14 +58,27 @@ spec:
               expected-value: conn2_session_alias
               operation: EQUAL
 ```
+
 ## Descriptor gradle plugin
 
-Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows generating a th2 descriptor. CI should publish the project's docker image with the descriptor content as the value of the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
-
+Also we recommend to
+apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows
+generating a th2 descriptor. CI should publish the project's docker image with the descriptor content as the value of
+the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
 
+### 5.0.0
+
++ Migrated to th2 transport protocol
++ Updated bom to `4.4.0`
++ Updated common to `5.3.0`
++ Updated grpc-act-template to `4.1.0`
++ Updated grpc-check1 to `4.2.0`
++ Added common-utils `2.1.0`
+
 ### 4.0.1
+
 + 3.9.0 merged
 
 ### 4.0.0
@@ -71,7 +88,7 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
     + Update `th2-common` version from `3.26.4` to `4.0.0`
     + Update `th2-grpc-act-template` version from `3.4.0` to `4.0.0`
     + Update `th2-grpc-check1` version from `3.4.2` to `4.0.0`
-    
+
 ### 3.9.0
 
 + th2-common to `3.44.1`
@@ -79,6 +96,7 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 + th2-grpc-check to `3.8.0`
 + grpc-check1 updated to `3.8.0`
 + updated gradle to 7.6
+
 ### 3.8.0
 
 + Update `th2-grpc-act-template` version from `3.9.0` to `3.10.0`
@@ -120,5 +138,6 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 + reads dictionaries from the /var/th2/config/dictionary folder.
 + uses mq_router, grpc_router, cradle_manager optional JSON configs from the /var/th2/config folder
-+ tries to load log4j.properties files from sources in order: '/var/th2/config', '/home/etc', configured path via cmd, default configuration
++ tries to load log4j.properties files from sources in order: '/var/th2/config', '/home/etc', configured path via cmd,
+  default configuration
 + update Cradle version. Introduce async API for storing events
