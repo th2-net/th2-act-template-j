@@ -92,7 +92,10 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:4.4.0')
 
-    implementation 'com.exactpro.th2:common:5.3.0-separate-executor-+'
+    implementation('com.exactpro.th2:common:5.3.0-separate-executor-+') {
+        exclude group: 'com.exactpro.th2', module: 'cradle-core'
+        exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
+    }
     implementation 'com.exactpro.th2:common-utils:2.1.0-transport-protocol-+'
     implementation 'com.exactpro.th2:grpc-act-template:4.1.0-TH2-4985-+'
     implementation 'com.exactpro.th2:grpc-check1:4.2.0-TH2-4906-+'
