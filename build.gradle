@@ -17,6 +17,7 @@ plugins {
     id 'java-library'
     id 'application'
     id "org.owasp.dependencycheck" version "8.2.1"
+    id "com.gorylenko.gradle-git-properties" version "2.4.1"
 }
 
 dependencyCheck {
