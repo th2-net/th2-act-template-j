@@ -1,3 +1,6 @@
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 buildscript {
     repositories {
         maven {
@@ -12,12 +15,14 @@ buildscript {
 
 plugins {
     id 'com.palantir.docker' version '0.25.0'
-    id 'org.jetbrains.kotlin.jvm' version '1.6.21'
+    id 'org.jetbrains.kotlin.jvm' version '1.8.22'
     id 'java'
     id 'java-library'
     id 'application'
-    id "org.owasp.dependencycheck" version "8.2.1"
+    id "org.owasp.dependencycheck" version "8.3.1"
     id "com.gorylenko.gradle-git-properties" version "2.4.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.4.0"
 }
 
 dependencyCheck {
@@ -30,12 +35,6 @@ dependencyCheck {
         nodeEnabled = false
     }
 }
-
-apply plugin: 'java'
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
-apply plugin: 'application'
-apply plugin: 'com.palantir.docker'
 
 apply plugin: 'th2plugin'
 
@@ -91,12 +90,12 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.4.0')
+    api platform('com.exactpro.th2:bom:4.5.0')
 
-    implementation 'com.exactpro.th2:common:5.3.0-separate-executor-+'
-    implementation 'com.exactpro.th2:common-utils:2.1.0-transport-protocol-+'
-    implementation 'com.exactpro.th2:grpc-act-template:4.1.0-TH2-4985-+'
-    implementation 'com.exactpro.th2:grpc-check1:4.2.0-TH2-4906-+'
+    implementation 'com.exactpro.th2:common:5.4.0-dev'
+    implementation 'com.exactpro.th2:common-utils:2.2.0-dev'
+    implementation 'com.exactpro.th2:grpc-act-template:4.1.0'
+    implementation 'com.exactpro.th2:grpc-check1:4.2.0-dev'
 
     implementation "com.fasterxml.jackson.core:jackson-core"
     implementation "com.fasterxml.jackson.core:jackson-databind"
@@ -105,7 +104,7 @@ dependencies {
 
     implementation "org.apache.commons:commons-lang3"
 
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.3'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
     testImplementation 'io.strikt:strikt-core:0.34.1'
     testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
 }
@@ -115,13 +114,13 @@ test {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.act.ActMain'
+    mainClass.set('com.exactpro.th2.act.ActMain')
 }
 
 applicationName = 'service'
 
 distTar {
-    archiveName "${applicationName}.tar"
+    archiveFileName.set("${applicationName}.tar")
 }
 
 dockerPrepare {
@@ -130,4 +129,25 @@ dockerPrepare {
 
 docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
+licenseReport {
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
+    ]
+    renderers = [
+            new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
