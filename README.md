@@ -74,11 +74,12 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 ### 5.0.0
 
 + Migrated to th2 transport protocol
-+ Updated bom to `4.4.0`
-+ Updated common to `5.3.0`
++ Updated bom to `4.5.0`
++ Updated kotlin to `1.8.22`
++ Updated common to `5.4.0`
 + Updated grpc-act-template to `4.1.0`
-+ Updated grpc-check1 to `4.2.0`
-+ Added common-utils `2.1.0`
++ Updated grpc-check1 to `4.3.0`
++ Added common-utils `2.2.0`
 
 ### 4.0.1
 
