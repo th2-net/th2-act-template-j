@@ -15,8 +15,8 @@
  */
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 
 public interface Listener {
-    void handle(Message message) throws Exception;
+    void handle(MessageHolder message) throws Exception;
 }

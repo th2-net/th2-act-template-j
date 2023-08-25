@@ -16,7 +16,18 @@
 
 package com.exactpro.th2.act.impl;
 
-import static com.google.protobuf.TextFormat.shortDebugString;
+import com.exactpro.th2.act.Listener;
+import com.exactpro.th2.act.SubscriptionManager;
+import com.exactpro.th2.common.schema.message.DeliveryMetadata;
+import com.exactpro.th2.common.schema.message.MessageListener;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Message;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageGroup;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage;
+import com.exactpro.th2.common.utils.message.TransportMessageHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -24,25 +35,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import com.exactpro.th2.act.Listener;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.schema.message.DeliveryMetadata;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.exactpro.th2.act.SubscriptionManager;
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.schema.message.MessageListener;
-
-public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, SubscriptionManager {
+public class SubscriptionManagerImpl implements MessageListener<GroupBatch>, SubscriptionManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(SubscriptionManagerImpl.class);
     private final Map<Direction, List<Listener>> callbacks;
 
     public SubscriptionManagerImpl() {
         Map<Direction, List<Listener>> callbacks = new EnumMap<>(Direction.class);
-        callbacks.put(Direction.FIRST, new CopyOnWriteArrayList<>());
-        callbacks.put(Direction.SECOND, new CopyOnWriteArrayList<>());
+        callbacks.put(Direction.INCOMING, new CopyOnWriteArrayList<>());
+        callbacks.put(Direction.OUTGOING, new CopyOnWriteArrayList<>());
         this.callbacks = Collections.unmodifiableMap(callbacks);
     }
 
@@ -61,31 +61,37 @@ public class SubscriptionManagerImpl implements MessageListener<MessageBatch>, S
     @Override
     public void handle(
             @SuppressWarnings("UseOfConcreteClass") DeliveryMetadata deliveryMetadata,
-            @SuppressWarnings("ParameterNameDiffersFromOverriddenParameter") MessageBatch messageBatch
+            @SuppressWarnings("ParameterNameDiffersFromOverriddenParameter") GroupBatch messageBatch
     ) {
-        if (messageBatch.getMessagesCount() < 0) {
-            if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Empty batch received {}", shortDebugString(messageBatch));
-            }
+        if (messageBatch.getGroups().isEmpty()) {
+            LOGGER.warn("Empty batch received {}", messageBatch);
             return;
         }
 
-        for (Message message : messageBatch.getMessagesList()) {
-            Direction direction = message.getMetadata().getId().getDirection();
-            List<Listener> listeners = callbacks.get(direction);
-            if (listeners == null) {
-                if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("Unsupported direction {}. Batch: {}", direction, shortDebugString(messageBatch));
-                }
+        for (MessageGroup group : messageBatch.getGroups()) {
+            if (group.getMessages().isEmpty()) {
+                LOGGER.warn("Empty group received {}", group);
                 return;
             }
 
-            for (Listener listener : listeners) {
-                try {
-                    listener.handle(message);
-                } catch (Exception e) {
-                    if (LOGGER.isErrorEnabled()) {
-                        LOGGER.error("Cannot handle batch from {}. Batch: {}", direction, shortDebugString(messageBatch), e);
+            for (Message<?> message : group.getMessages()) {
+                Direction direction = message.getId().getDirection();
+                List<Listener> listeners = callbacks.get(direction);
+                if (listeners == null) {
+                    LOGGER.warn("Unsupported direction {}. batch has been skipped: {}", direction, messageBatch);
+                    return;
+                }
+
+                if (!(message instanceof ParsedMessage)) {
+                    LOGGER.warn("Unsupported message type: {}, message id {}", message.getClass().getSimpleName(), message.getId());
+                    continue;
+                }
+
+                for (Listener listener : listeners) {
+                    try {
+                        listener.handle(new TransportMessageHolder((ParsedMessage) message, messageBatch.getBook(), messageBatch.getSessionGroup()));
+                    } catch (Exception e) {
+                        LOGGER.error("Cannot handle message {}", message, e);
                     }
                 }
             }

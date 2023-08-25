@@ -16,11 +16,11 @@
 
 package com.exactpro.th2.act.rules;
 
-import java.util.Objects;
-
 import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.Message;
+import com.exactpro.th2.common.utils.message.MessageHolder;
+
+import java.util.Objects;
 
 public class ParentIdCheckRule extends AbstractSingleConnectionRule {
     private final EventID expectedParentId;
@@ -31,7 +31,7 @@ public class ParentIdCheckRule extends AbstractSingleConnectionRule {
     }
 
     @Override
-    protected boolean checkMessageFromConnection(Message message) {
-        return message.hasParentEventId() && expectedParentId.equals(message.getParentEventId());
+    protected boolean checkMessageFromConnection(MessageHolder message) {
+        return expectedParentId.equals(message.getParentEventId());
     }
 }

@@ -16,7 +16,7 @@
 
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction;
 
 public interface SubscriptionManager {
     void register(Direction direction, Listener listener);

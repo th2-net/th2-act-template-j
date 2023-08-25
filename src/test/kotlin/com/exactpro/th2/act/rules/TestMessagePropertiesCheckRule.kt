@@ -15,55 +15,58 @@
  */
 package com.exactpro.th2.act.rules
 
-import com.exactpro.th2.act.util.createDefaultMessage
+import com.exactpro.th2.act.util.TEST_BOOK
+import com.exactpro.th2.act.util.TEST_SESSION_ALIAS
+import com.exactpro.th2.act.util.TEST_SESSION_GROUP
+import com.exactpro.th2.act.util.createTransportMessage
 import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.MessageMetadata
+import com.exactpro.th2.common.utils.message.TransportMessageHolder
 import org.junit.jupiter.api.Test
 import strikt.api.expect
-import strikt.assertions.*
+import strikt.assertions.isFalse
+import strikt.assertions.isNotNull
+import strikt.assertions.isNull
+import strikt.assertions.isSameInstanceAs
+import strikt.assertions.isTrue
 
 class TestMessagePropertiesCheckRule {
     private val connectionId = ConnectionID.newBuilder()
-            .setSessionAlias("test")
-            .build()
-    private val rule = MessagePropertiesCheckRule(connectionId, mapOf(
+        .setSessionAlias(TEST_SESSION_ALIAS)
+        .build()
+    private val rule = MessagePropertiesCheckRule(
+        connectionId, mapOf(
             "prop1" to "value1",
             "prop2" to "value2"
-    ))
+        )
+    )
 
     @Test
     fun `finds match`() {
-        val message = createDefaultMessage()
-                .mergeMetadata(
-                        MessageMetadata.newBuilder()
-                                .putAllProperties(mapOf(
-                                        "prop1" to "value1",
-                                        "prop2" to "value2",
-                                        "prop3" to "value3"
-                                ))
-                                .build()
-                ).build()
+        val message = TransportMessageHolder(
+            createTransportMessage()
+                .addMetadataProperty("prop1", "value1")
+                .addMetadataProperty("prop2", "value2")
+                .addMetadataProperty("prop3", "value3")
+                .build(), TEST_BOOK, TEST_SESSION_GROUP
+        )
 
         expect {
             that(rule.onMessage(message)).isTrue()
             that(rule.response)
-                    .isNotNull()
-                    .isSameInstanceAs(message)
+                .isNotNull()
+                .isSameInstanceAs(message)
         }
     }
 
     @Test
     fun `skips messages if any property is not matched`() {
-        val message = createDefaultMessage()
-                .mergeMetadata(
-                        MessageMetadata.newBuilder()
-                                .putAllProperties(mapOf(
-                                        "prop1" to "value1",
-                                        "prop2" to "value3",
-                                        "prop3" to "value3"
-                                ))
-                                .build()
-                ).build()
+        val message = TransportMessageHolder(
+            createTransportMessage()
+                .addMetadataProperty("prop1", "value1")
+                .addMetadataProperty("prop2", "value3")
+                .addMetadataProperty("prop3", "value3")
+                .build(), TEST_BOOK, TEST_SESSION_GROUP
+        )
 
         expect {
             that(rule.onMessage(message)).isFalse()
@@ -73,15 +76,12 @@ class TestMessagePropertiesCheckRule {
 
     @Test
     fun `skips messages if any property is missed`() {
-        val message = createDefaultMessage()
-                .mergeMetadata(
-                        MessageMetadata.newBuilder()
-                                .putAllProperties(mapOf(
-                                        "prop1" to "value1",
-                                        "prop3" to "value3"
-                                ))
-                                .build()
-                ).build()
+        val message = TransportMessageHolder(
+            createTransportMessage()
+                .addMetadataProperty("prop1", "value1")
+                .addMetadataProperty("prop3", "value3")
+                .build(), TEST_BOOK, TEST_SESSION_GROUP
+        )
 
         expect {
             that(rule.onMessage(message)).isFalse()
