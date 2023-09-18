@@ -94,7 +94,7 @@ dependencies {
 
     implementation 'com.exactpro.th2:common:5.4.0-dev'
     implementation 'com.exactpro.th2:common-utils:2.2.0-dev'
-    implementation 'com.exactpro.th2:grpc-act-template:4.1.0'
+    implementation 'com.exactpro.th2:grpc-act-template:4.1.0-TH2-5073+'
     implementation 'com.exactpro.th2:grpc-check1:4.2.0-dev'
 
     implementation "com.fasterxml.jackson.core:jackson-core"

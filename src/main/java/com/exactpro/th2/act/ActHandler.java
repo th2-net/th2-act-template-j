@@ -20,6 +20,8 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
 import com.exactpro.th2.act.grpc.PlaceMessageResponse;
 import com.exactpro.th2.act.grpc.SendMessageResponse;
+import com.exactpro.th2.act.grpc.SendRawMessageRequest;
+import com.exactpro.th2.act.grpc.SendRawMessageResponse;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
 import com.exactpro.th2.act.rules.FieldCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
@@ -27,6 +29,7 @@ import com.exactpro.th2.check1.grpc.CheckpointRequest;
 import com.exactpro.th2.check1.grpc.CheckpointResponse;
 import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.Event.Status;
+import com.exactpro.th2.common.event.EventUtils;
 import com.exactpro.th2.common.event.IBodyData;
 import com.exactpro.th2.common.event.bean.TreeTable;
 import com.exactpro.th2.common.event.bean.builder.CollectionBuilder;
@@ -42,6 +45,8 @@ import com.exactpro.th2.common.grpc.Message;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.grpc.MessageMetadata;
 import com.exactpro.th2.common.grpc.MessageOrBuilder;
+import com.exactpro.th2.common.grpc.RawMessageMetadata;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage;
 import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -57,6 +62,7 @@ import com.google.protobuf.util.JsonFormat;
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.stub.StreamObserver;
+import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,6 +84,7 @@ import static com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR;
 import static com.exactpro.th2.common.grpc.RequestStatus.Status.SUCCESS;
 import static com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction.INCOMING;
 import static com.exactpro.th2.common.utils.message.MessageHolderUtilsKt.getTreeTable;
+import static com.exactpro.th2.common.utils.message.MessageUtilsKt.toTransport;
 import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toBatch;
 import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toGroup;
 import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toTreeTable;
@@ -166,6 +173,47 @@ public class ActHandler extends ActImplBase {
             sendErrorResponse(responseObserver, "Failed to place an OrderCancelReplaceRequest. Error: " + e.getMessage());
         } finally {
             LOGGER.debug("placeOrderCancelReplaceRequest has finished");
+        }
+    }
+
+    @Override
+    public void sendRawMessage(SendRawMessageRequest request, StreamObserver<SendRawMessageResponse> responseObserver) {
+        long startPlaceMessage = System.currentTimeMillis();
+        try {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Sending  message request: " + shortDebugString(request));
+            }
+
+            String actName = "sendRawMessage";
+            // FIXME store parent with fail in case of children fail
+            EventID parentId = createAndStoreParentEvent(request, actName, PASSED);
+
+            Checkpoint checkpoint = registerCheckPoint(parentId);
+
+            if (Context.current().isCancelled()) {
+                LOGGER.warn("'{}' request cancelled by client", actName);
+                sendRawMessageErrorResponse(responseObserver, "Request has been cancelled by client");
+            }
+
+            try {
+                sendRawMessage(request.getRaw(), parentId);
+            } catch (Exception ex) {
+                createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
+                throw ex;
+            }
+
+            SendRawMessageResponse response = SendRawMessageResponse.newBuilder()
+                .setStatus(RequestStatus.newBuilder().setStatus(SUCCESS).build())
+                .setCheckpointId(checkpoint)
+                .build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+
+        } catch (RuntimeException | IOException e) {
+            LOGGER.error("Failed to send a message. Message = {}", request.getRaw(), e);
+            sendRawMessageErrorResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
+        } finally {
+            LOGGER.debug("Sending the message has been finished in {}", System.currentTimeMillis() - startPlaceMessage);
         }
     }
 
@@ -390,6 +438,26 @@ public class ActHandler extends ActImplBase {
         }
     }
 
+    private EventID createAndStoreParentEvent(SendRawMessageRequest request, String actName, Status status) throws IOException {
+        long startTime = System.currentTimeMillis();
+
+        Event event = start()
+            .name(actName + ' ' + request.getRaw().getMetadata().getId().getConnectionId().getSessionAlias())
+            .type(actName)
+            .status(status)
+            .endTimestamp(); // FIXME set properly as is in the last child
+
+        com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
+        //FIXME process response
+        try {
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
+            LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
+            return protoEvent.getId();
+        } catch (IOException e) {
+            throw new RuntimeException("Can not send event = " + protoEvent.getId().getId(), e);
+        }
+    }
+
     private void createAndStoreNoResponseEvent(
             String actName, NoResponseBodySupplier noResponseBodySupplier,
             Instant start,
@@ -507,12 +575,49 @@ public class ActHandler extends ActImplBase {
         }
     }
 
+    private void sendRawMessage(com.exactpro.th2.common.grpc.RawMessage rawMessage, EventID parentEventId) throws IOException {
+        try {
+            LOGGER.debug("Sending the message started");
+            RawMessageMetadata metadata = rawMessage.getMetadata();
+            RawMessage transportRawMessage = RawMessage.builder()
+                .setId(toTransport(metadata.getId()))
+                .setProtocol(metadata.getProtocol())
+                .setMetadata(metadata.getPropertiesMap())
+                .setEventId(EventUtilsKt.toTransport(parentEventId))
+                .setBody(rawMessage.getBody().toByteArray())
+                .build();
+            //May be use in future for filtering
+            //request.getConnectionId().getSessionAlias();
+            MessageID messageID = metadata.getId();
+            messageRouter.send(toBatch(toGroup(transportRawMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), "send_raw");
+            //TODO remove after solving issue TH2-217
+            //TODO process response
+            EventBatch eventBatch = EventBatch.newBuilder()
+                .addEvents(createSendRawMessageEvent(transportRawMessage, parentEventId))
+                .build();
+            eventBatchMessageRouter.send(eventBatch, "publish", "event");
+        } finally {
+            LOGGER.debug("Sending the message ended");
+        }
+    }
+
     private com.exactpro.th2.common.grpc.Event createSendMessageEvent(ParsedMessage message, EventID parentEventId) throws IOException {
         Event event = start()
                 .name("Send '" + message.getType() + "' message to connectivity");
         TreeTable parametersTable = toTreeTable(message);
         event.status(Status.PASSED);
         event.bodyData(parametersTable);
+        event.type("Outgoing message");
+        return event.toProto(parentEventId);
+    }
+
+    private com.exactpro.th2.common.grpc.Event createSendRawMessageEvent(RawMessage message, EventID parentEventId) throws IOException {
+        String bodyString = message.getBody().toString(StandardCharsets.UTF_8);
+        Event event = start()
+            .name("Send '" + bodyString + "' message to connectivity");
+        com.exactpro.th2.common.event.bean.Message messageBean = EventUtils.createMessageBean(bodyString);
+        event.status(Status.PASSED);
+        event.bodyData(messageBean);
         event.type("Outgoing message");
         return event.toProto(parentEventId);
     }
@@ -589,6 +694,20 @@ public class ActHandler extends ActImplBase {
                         .setMessage(message)
                         .build())
                 .build());
+        responseObserver.onCompleted();
+        LOGGER.debug("Error response : {}", message);
+    }
+
+    private void sendRawMessageErrorResponse(
+        StreamObserver<SendRawMessageResponse> responseObserver,
+        String message
+    ) {
+        responseObserver.onNext(SendRawMessageResponse.newBuilder()
+            .setStatus(RequestStatus.newBuilder()
+                .setStatus(ERROR)
+                .setMessage(message)
+                .build())
+            .build());
         responseObserver.onCompleted();
         LOGGER.debug("Error response : {}", message);
     }
