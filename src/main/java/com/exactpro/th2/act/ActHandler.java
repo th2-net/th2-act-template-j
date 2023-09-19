@@ -98,6 +98,7 @@ import static java.util.stream.Collectors.toUnmodifiableMap;
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private static final String SEND_RAW_QUEUE_ATTRIBUTE = "send_raw";
+    private static final String SEND_QUEUE_ATTRIBUTE = "send";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
     private final Check1Service check1Service;
@@ -565,7 +566,7 @@ public class ActHandler extends ActImplBase {
             //May be use in future for filtering
             //request.getConnectionId().getSessionAlias();
             MessageID messageID = message.getMetadata().getId();
-            messageRouter.send(toBatch(toGroup(parsedMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()));
+            messageRouter.send(toBatch(toGroup(parsedMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), SEND_QUEUE_ATTRIBUTE);
             //TODO remove after solving issue TH2-217
             //TODO process response
             EventBatch eventBatch = EventBatch.newBuilder()
@@ -613,7 +614,7 @@ public class ActHandler extends ActImplBase {
     private com.exactpro.th2.common.grpc.Event createSendRawMessageEvent(RawMessage message, EventID parentEventId) throws IOException {
         Event event = start()
             .name("Sent raw message to connectivity");
-        com.exactpro.th2.common.event.bean.Message messageBean = EventUtils.createMessageBean(ByteBufUtil.hexDump(message.getBody()));
+        com.exactpro.th2.common.event.bean.Message messageBean = EventUtils.createMessageBean(ByteBufUtil.prettyHexDump(message.getBody()));
         event.status(Status.PASSED);
         event.bodyData(messageBean);
         event.type("Outgoing message");
