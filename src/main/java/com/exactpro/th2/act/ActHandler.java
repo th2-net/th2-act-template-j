@@ -98,6 +98,7 @@ import static java.util.stream.Collectors.toUnmodifiableMap;
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private static final String SEND_RAW_QUEUE_ATTRIBUTE = "send_raw";
+    private static final String SEND_QUEUE_ATTRIBUTE = "send";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
     private final Check1Service check1Service;

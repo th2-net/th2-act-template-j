@@ -1,4 +1,4 @@
-# th2 act template (5.1.0)
+# th2 act template (5.1.1)
 
 ## Overview
 
@@ -49,6 +49,7 @@ spec:
       connection-type: mq
       attributes:
         - publish
+        - send
         - transport-group
       filters:
         - metadata:
@@ -59,6 +60,7 @@ spec:
       connection-type: mq
       attributes:
         - publish
+        - send
         - transport-group
       filters:
         - metadata:
@@ -97,6 +99,9 @@ generating a th2 descriptor. CI should publish the project's docker image with t
 the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
+
+### 5.1.1
++ Use pins with `send` pin attribute for parsed messages sends.
 
 ### 5.1.0
 + Added RPC to send raw messages.
