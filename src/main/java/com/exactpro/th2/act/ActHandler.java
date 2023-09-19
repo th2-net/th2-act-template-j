@@ -97,6 +97,7 @@ import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class ActHandler extends ActImplBase {
     private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
+    private static final String SEND_RAW_QUEUE_ATTRIBUTE = "send_raw";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
     private final Check1Service check1Service;
@@ -586,12 +587,9 @@ public class ActHandler extends ActImplBase {
                 .setEventId(EventUtilsKt.toTransport(parentEventId))
                 .setBody(rawMessage.getBody().toByteArray())
                 .build();
-            //May be use in future for filtering
-            //request.getConnectionId().getSessionAlias();
             MessageID messageID = metadata.getId();
-            messageRouter.send(toBatch(toGroup(transportRawMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), "send_raw");
-            //TODO remove after solving issue TH2-217
-            //TODO process response
+            messageRouter.send(toBatch(toGroup(transportRawMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), SEND_RAW_QUEUE_ATTRIBUTE);
+
             EventBatch eventBatch = EventBatch.newBuilder()
                 .addEvents(createSendRawMessageEvent(transportRawMessage, parentEventId))
                 .build();
