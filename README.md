@@ -17,8 +17,13 @@ Most of them consists of the next steps:
 3. Sends the passed business message to Codec via mq pin
 4. Waits the specific business message from Codec during specified timeout
 5. Returns responded business message with checkpoint
-
 ![picture](scheme.png)
+
+### Sending raw messages
+It is also possible to send raw messages ( containing metadata and having payload in original format ) directly to conn components without waiting while message will be encoded by codec and then sent to conn component.
+For that you need to:
+1. Send rpc request using `SendRawMessageRequest` and `sendRawMessage` rpc that is defined in [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+2. Transport group with `RawMessage` will be published to pins with `send_raw` attribute.
 
 ## Custom resources for infra-mgr
 
@@ -60,6 +65,28 @@ spec:
             - field-name: session_alias
               expected-value: conn2_session_alias
               operation: EQUAL
+    - name: to_conn1_transport
+      connection-type: mq
+      attributes:
+        - publish
+        - transport-group
+        - send_raw
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn1_session_alias
+              operation: EQUAL
+    - name: to_conn2_transport
+      connection-type: mq
+      attributes:
+        - publish
+        - transport-group
+        - send_raw
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn1_session_alias
+              operation: EQUAL
 ```
 
 ## Descriptor gradle plugin
@@ -73,6 +100,7 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 
 ### 5.1.0
 + Added RPC to send raw messages.
++ Updated grpc-act-template to `4.2.0`
 
 ### 5.0.0
 

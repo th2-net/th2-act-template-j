@@ -62,7 +62,7 @@ import com.google.protobuf.util.JsonFormat;
 import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.stub.StreamObserver;
-import java.nio.charset.StandardCharsets;
+import io.netty.buffer.ByteBufUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -611,10 +611,9 @@ public class ActHandler extends ActImplBase {
     }
 
     private com.exactpro.th2.common.grpc.Event createSendRawMessageEvent(RawMessage message, EventID parentEventId) throws IOException {
-        String bodyString = message.getBody().toString(StandardCharsets.UTF_8);
         Event event = start()
-            .name("Send '" + bodyString + "' message to connectivity");
-        com.exactpro.th2.common.event.bean.Message messageBean = EventUtils.createMessageBean(bodyString);
+            .name("Sent raw message to connectivity");
+        com.exactpro.th2.common.event.bean.Message messageBean = EventUtils.createMessageBean(ByteBufUtil.hexDump(message.getBody()));
         event.status(Status.PASSED);
         event.bodyData(messageBean);
         event.type("Outgoing message");
