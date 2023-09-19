@@ -194,6 +194,7 @@ public class ActHandler extends ActImplBase {
             if (Context.current().isCancelled()) {
                 LOGGER.warn("'{}' request cancelled by client", actName);
                 sendRawMessageErrorResponse(responseObserver, "Request has been cancelled by client");
+                return;
             }
 
             try {
@@ -210,7 +211,7 @@ public class ActHandler extends ActImplBase {
             responseObserver.onNext(response);
             responseObserver.onCompleted();
 
-        } catch (RuntimeException | IOException e) {
+        } catch (Exception e) {
             LOGGER.error("Failed to send a message. Message = {}", request.getRaw(), e);
             sendRawMessageErrorResponse(responseObserver, "Send message failed. Error: " + e.getMessage());
         } finally {
