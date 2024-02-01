@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.exactpro.th2.act.impl
 
 import com.exactpro.th2.act.Listener
@@ -26,11 +27,11 @@ import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMess
 import com.exactpro.th2.common.utils.message.TransportMessageHolder
 import com.exactpro.th2.common.utils.message.transport.toBatch
 import com.exactpro.th2.common.utils.message.transport.toGroup
-import com.nhaarman.mockitokotlin2.any
-import com.nhaarman.mockitokotlin2.eq
-import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.never
-import com.nhaarman.mockitokotlin2.verify
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -39,7 +40,7 @@ import org.junit.jupiter.params.provider.EnumSource
 class TestSubscriptionManagerImpl {
 
     private val manager = SubscriptionManagerImpl()
-    private val deliveryMetadata: DeliveryMetadata = mock { }
+    private val deliveryMetadata = DeliveryMetadata("test_tag_1", false)
 
     @Test
     fun `correctly distributes the batches`() {

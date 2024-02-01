@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.exactpro.th2.act
 
 import com.exactpro.th2.act.impl.SubscriptionManagerImpl
@@ -27,8 +28,8 @@ import com.exactpro.th2.common.utils.message.MessageHolder
 import com.exactpro.th2.common.utils.message.toTransport
 import com.exactpro.th2.common.utils.message.transport.toBatch
 import com.exactpro.th2.common.utils.message.transport.toGroup
-import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.verify
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.assertions.containsExactlyInAnyOrder
@@ -44,7 +45,7 @@ class TestBiDirectionalMessageReceiver {
         .build()
     private val manager = SubscriptionManagerImpl()
     private val monitor: ResponseMonitor = mock { }
-    private val deliveryMetadata: DeliveryMetadata = mock { }
+    private val deliveryMetadata = DeliveryMetadata("test_tag_1", false)
 
     private fun receiver(outgoing: CheckRule, incomingSupplier: (MessageHolder) -> CheckRule): AbstractMessageReceiver =
         BiDirectionalMessageReceiver(

@@ -1,4 +1,4 @@
-# th2 act template (5.1.1)
+# th2 act template (5.2.0)
 
 ## Overview
 
@@ -99,6 +99,9 @@ generating a th2 descriptor. CI should publish the project's docker image with t
 the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
+
+### 5.2.0
++ `multiSendMessage` method implemented
 
 ### 5.1.1
 + Use pins with `send` pin attribute for parsed messages sends.
