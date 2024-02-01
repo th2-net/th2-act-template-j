@@ -267,6 +267,11 @@ public class ActHandler extends ActImplBase {
     public void multiSendMessage(MultiSendRequest request, StreamObserver<SendMessageResponse> responseObserver) {
         long startPlaceMessage = System.currentTimeMillis();
         try {
+            var messages = request.getMessagesList();
+            if (messages.isEmpty()) {
+                throw new IllegalArgumentException("Empty message list is not allowed");
+            }
+
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Sending message request: " + shortDebugString(request));
             }
@@ -283,7 +288,7 @@ public class ActHandler extends ActImplBase {
             }
 
             try {
-                multiSendMessage(request.getMessagesList(), parentId);
+                multiSendMessage(messages, parentId);
             } catch (Exception ex) {
                 createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -476,7 +481,7 @@ public class ActHandler extends ActImplBase {
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -492,12 +497,12 @@ public class ActHandler extends ActImplBase {
                 .description(request.getDescription())
                 .type(actName)
                 .status(status)
-                .endTimestamp(); // FIXME set properly as is in the last child
+                .endTimestamp();
 
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -517,7 +522,7 @@ public class ActHandler extends ActImplBase {
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -636,7 +641,7 @@ public class ActHandler extends ActImplBase {
             EventBatch eventBatch = EventBatch.newBuilder()
                     .addEvents(createSendMessageEvent(parsedMessage, parentEventId))
                     .build();
-            eventBatchMessageRouter.send(eventBatch, "publish", "event");
+            eventBatchMessageRouter.send(eventBatch);
         } finally {
             LOGGER.debug("Sending the message ended");
         }
@@ -644,11 +649,7 @@ public class ActHandler extends ActImplBase {
 
     private void multiSendMessage(List<Message> messages, EventID parentEventId) throws IOException {
         try {
-            LOGGER.debug("Sending the message started");
-
-            if (messages.isEmpty()) {
-                throw new IllegalArgumentException("Empty message list is not allowed");
-            }
+            LOGGER.debug("Sending the message list started");
 
             final var firstMessageId = messages.get(0).getMetadata().getId();
             final var bookName = firstMessageId.getBookName();
@@ -668,14 +669,8 @@ public class ActHandler extends ActImplBase {
             );
 
             messageRouter.send(batch, SEND_QUEUE_ATTRIBUTE);
-            //TODO remove after solving issue TH2-217
-            //TODO process response
-/*            EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(parsedMessage, parentEventId))
-                    .build();
-            eventBatchMessageRouter.send(eventBatch, "publish", "event");*/
         } finally {
-            LOGGER.debug("Sending the message ended");
+            LOGGER.debug("Sending the message list completed");
         }
     }
 
@@ -696,7 +691,7 @@ public class ActHandler extends ActImplBase {
             EventBatch eventBatch = EventBatch.newBuilder()
                 .addEvents(createSendRawMessageEvent(transportRawMessage, parentEventId))
                 .build();
-            eventBatchMessageRouter.send(eventBatch, "publish", "event");
+            eventBatchMessageRouter.send(eventBatch);
         } finally {
             LOGGER.debug("Sending the message ended");
         }
@@ -737,7 +732,7 @@ public class ActHandler extends ActImplBase {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Try to store event: {}", toDebugMessage(eventRequest));
             }
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build(), "publish", "event");
+            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build());
         } catch (Exception e) {
             LOGGER.error("Could not store event", e);
         }
