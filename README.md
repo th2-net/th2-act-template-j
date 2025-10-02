@@ -101,7 +101,7 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 ## Release Notes
 
 ### 5.3.0
-+ Migrate to th2 gradle plugin `0.3.8` (th2-bom: `4.14.1`)
++ Migrate to th2 gradle plugin `0.3.9` (th2-bom: `4.14.1`)
 + Updated:
   + kotlin: `2.2.10`
   + common: `5.16.1-dev`
