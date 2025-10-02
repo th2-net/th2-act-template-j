@@ -1,4 +1,4 @@
-# th2 act template (5.2.0)
+# th2 act template (5.3.0)
 
 ## Overview
 
@@ -99,6 +99,15 @@ generating a th2 descriptor. CI should publish the project's docker image with t
 the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
+
+### 5.3.0
++ Migrate to th2 gradle plugin `0.3.8` (th2-bom: `4.14.1`)
++ Updated:
+  + kotlin: `2.2.10`
+  + common: `5.16.1-dev`
+  + common-utils: `2.4.0-dev`
+  + grpc-act-template: `4.3.1`
+  + grpc-check1: `4.5.1`
 
 ### 5.2.0
 + `multiSendMessage` method implemented

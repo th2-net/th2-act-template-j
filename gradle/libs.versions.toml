@@ -1,0 +1,17 @@
+[versions]
+kotlin = "2.2.10"
+th2-plugin = "0.3.8"
+
+[libraries]
+th2-common = { group = "com.exactpro.th2", name = "common", version = "5.16.1-dev" }
+th2-common-utils = { group = "com.exactpro.th2", name = "common-utils", version = "2.4.0-dev" }
+th2-grpc-act = { group = "com.exactpro.th2", name = "grpc-act-template", version = "4.3.1" }
+th2-grpc-check1 = { group = "com.exactpro.th2", name = "grpc-check1", version = "4.5.1" }
+
+junit-bom = { group = "org.junit", name = "junit-bom", version = "5.13.4" }
+strikt-core = { group = "io.strikt", name = "strikt-core", version = "0.34.1" }
+mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version = "6.1.0" }
+
+[plugins]
+th2-component = { id = "com.exactpro.th2.gradle.component", version.ref = "th2-plugin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
