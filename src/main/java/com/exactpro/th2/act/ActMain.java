@@ -65,7 +65,7 @@ public class ActMain {
                     messageRouter,
                     subscriptionManager,
                     factory.getEventBatchRouter(),
-                    configuration.skipCheck1() ? null : grpcRouter.getService(Check1Service.class)
+                    configuration.check1Enabled() ? grpcRouter.getService(Check1Service.class) : null
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             resources.add(actServer::stop);

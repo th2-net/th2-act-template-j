@@ -25,7 +25,7 @@ public class Configuration {
     @SuppressWarnings("FieldMayBeFinal")
     private boolean check1Enabled = true;
 
-    public boolean skipCheck1() {
+    public boolean check1Enabled() {
         return check1Enabled;
     }
 }
