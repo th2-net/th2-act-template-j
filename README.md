@@ -3,7 +3,7 @@
 ## Overview
 
 Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or
-other components can call these functions via gRPC. Act can interact with codec , hands, check1s, other acts to execute
+other components can call these functions via gRPC. Act can interact with codec, hands, check1s, other acts to execute
 its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2
 component type allows frequently used script logic into it and then share it between all th2 components.
 
@@ -13,10 +13,10 @@ the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blo
 Most of them consists of the next steps:
 
 1. Gets a gRPC request with parameters.
-2. Requests checkpoint from check1 via gRPC pin
+2. If `check1Enabled` option is true, requests checkpoint from check1 via gRPC pin otherwise generates empty checkpoint
 3. Sends the passed business message to Codec via mq pin
 4. Waits the specific business message from Codec during specified timeout
-5. Returns responded business message with checkpoint
+5. Returns responded business message with checkpoint (checkpoint is empty when `check1Enabled` option is false)
 ![picture](scheme.png)
 
 ### Sending raw messages
@@ -28,67 +28,49 @@ For that you need to:
 ## Custom resources for infra-mgr
 
 ```yaml
-apiVersion: th2.exactpro.com/v1
+apiVersion: th2.exactpro.com/v2
 kind: Th2Box
 metadata:
   name: act
 spec:
   type: th2-act
+  customConfig:
+    check1Enabled: true
   pins:
-    - name: grpc_server
-      connection-type: grpc
-    - name: grpc_client_to_check1
-      connection-type: grpc
-    - name: from_codec_transport
-      connection-type: mq
-      attributes:
-        - subscribe
-        - transport-group
-        - oe
-    - name: to_codec1_transport
-      connection-type: mq
-      attributes:
-        - publish
-        - send
-        - transport-group
-      filters:
-        - metadata:
-            - field-name: session_alias
-              expected-value: conn1_session_alias
-              operation: EQUAL
-    - name: to_codec2_transport
-      connection-type: mq
-      attributes:
-        - publish
-        - send
-        - transport-group
-      filters:
-        - metadata:
-            - field-name: session_alias
-              expected-value: conn2_session_alias
-              operation: EQUAL
-    - name: to_conn1_transport
-      connection-type: mq
-      attributes:
-        - publish
-        - transport-group
-        - send_raw
-      filters:
-        - metadata:
-            - field-name: session_alias
-              expected-value: conn1_session_alias
-              operation: EQUAL
-    - name: to_conn2_transport
-      connection-type: mq
-      attributes:
-        - publish
-        - transport-group
-        - send_raw
-      filters:
-        - metadata:
-            - field-name: session_alias
-              expected-value: conn1_session_alias
-              operation: EQUAL
+    mq:
+      publishers:
+        - name: to_codec_fix
+          attributes: [publish, transport-group, send]
+          filters:
+            - metadata:
+                - fieldName: "session_alias"
+                  expectedValue: "*-fix-*"
+                  operation: WILDCARD
+
+        - name: to_conn_client_fix
+          attributes: [publish, transport-group, send_raw]
+          filters:
+            - metadata:
+                - fieldName: "session_alias"
+                  expectedValue: "client-fix-*"
+                  operation: WILDCARD
+      subscribers:
+        - name: from_codec
+          attributes: [subscribe, transport-group, oe]
+          linkTo:
+            - box: codec-fix
+              pin: out_realtime_decode
+    grpc:
+      client:
+        - name: to_check1 # this pin optional when spec.customConfig.check1Enabled: false
+          serviceClass: com.exactpro.th2.check1.grpc.Check1Service
+          linkTo:
+            - box: check1
+              pin: server
+      server:
+        - name: server
+          serviceClasses:
+            - com.exactpro.th2.act.grpc.ActService
 ```
 
 ## Descriptor gradle plugin
@@ -101,6 +83,7 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 ## Release Notes
 
 ### 5.3.0
++ Provided `check1Enabled` option
 + Migrate to th2 gradle plugin `0.3.9` (th2-bom: `4.14.1`)
 + Updated:
   + kotlin: `2.2.10`
