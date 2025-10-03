@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,6 +68,7 @@ import io.netty.buffer.ByteBufUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -103,6 +104,7 @@ public class ActHandler extends ActImplBase {
     private static final String SEND_QUEUE_ATTRIBUTE = "send";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
+    @Nullable
     private final Check1Service check1Service;
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<GroupBatch> messageRouter;
@@ -112,11 +114,10 @@ public class ActHandler extends ActImplBase {
             MessageRouter<GroupBatch> router,
             SubscriptionManager subscriptionManager,
             MessageRouter<EventBatch> eventBatchRouter,
-            Check1Service check1Service
-    ) {
+            @Nullable Check1Service check1Service) {
         this.messageRouter = requireNonNull(router, "'Router' parameter");
         this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
-        this.check1Service = requireNonNull(check1Service, "'check1 service' parameter");
+        this.check1Service = check1Service;
         this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
     }
 
@@ -808,6 +809,9 @@ public class ActHandler extends ActImplBase {
     }
 
     private Checkpoint registerCheckPoint(EventID parentEventId) {
+        if (check1Service == null) {
+            return Checkpoint.getDefaultInstance();
+        }
         LOGGER.debug("Registering the checkpoint started");
         CheckpointResponse response = check1Service.createCheckpoint(CheckpointRequest.newBuilder()
                 .setParentEventId(parentEventId)

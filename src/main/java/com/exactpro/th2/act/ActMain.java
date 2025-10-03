@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,6 +55,8 @@ public class ActMain {
             MessageRouter<GroupBatch> messageRouter = factory.getTransportGroupBatchRouter();
             resources.add(messageRouter);
 
+            Configuration configuration = factory.getCustomConfiguration(Configuration.class);
+
             SubscriptionManagerImpl subscriptionManager = new SubscriptionManagerImpl();
             SubscriberMonitor subscriberMonitor = messageRouter.subscribeAll(subscriptionManager, OE_ATTRIBUTE_NAME);
             resources.add(subscriberMonitor::unsubscribe);
@@ -63,7 +65,7 @@ public class ActMain {
                     messageRouter,
                     subscriptionManager,
                     factory.getEventBatchRouter(),
-                    grpcRouter.getService(Check1Service.class)
+                    configuration.check1Enabled() ? grpcRouter.getService(Check1Service.class) : null
             );
             ActServer actServer = new ActServer(grpcRouter.startServer(actHandler));
             resources.add(actServer::stop);
