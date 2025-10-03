@@ -16,12 +16,12 @@
 
 package com.exactpro.th2.act.rules;
 
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.utils.message.MessageHolder;
+
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-
-import com.exactpro.th2.common.grpc.ConnectionID;
-import com.exactpro.th2.common.grpc.Message;
 
 public class MessagePropertiesCheckRule extends AbstractSingleConnectionRule {
     private final Map<String, String> expectedProperties;
@@ -35,8 +35,8 @@ public class MessagePropertiesCheckRule extends AbstractSingleConnectionRule {
     }
 
     @Override
-    protected boolean checkMessageFromConnection(Message message) {
-        Map<String, String> propertiesMap = message.getMetadata().getPropertiesMap();
+    protected boolean checkMessageFromConnection(MessageHolder message) {
+        Map<String, String> propertiesMap = message.getProperties();
         for (Entry<String, String> entry : expectedProperties.entrySet()) {
             String expectedKey = entry.getKey();
             String expectedValue = entry.getValue();

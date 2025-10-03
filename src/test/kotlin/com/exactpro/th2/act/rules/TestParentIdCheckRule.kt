@@ -15,41 +15,69 @@
  */
 package com.exactpro.th2.act.rules
 
+import com.exactpro.th2.act.util.TEST_BOOK
+import com.exactpro.th2.act.util.TEST_SCOPE
+import com.exactpro.th2.act.util.TEST_SESSION_ALIAS
+import com.exactpro.th2.act.util.TEST_SESSION_GROUP
+import com.exactpro.th2.act.util.createTransportMessage
 import com.exactpro.th2.common.grpc.ConnectionID
-import com.exactpro.th2.common.grpc.Direction
 import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.message.message
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.EventId
+import com.exactpro.th2.common.utils.event.toTransport
+import com.exactpro.th2.common.utils.message.TransportMessageHolder
+import com.exactpro.th2.common.utils.message.toTimestamp
 import org.junit.jupiter.api.Test
 import strikt.api.expect
-import strikt.assertions.*
+import strikt.assertions.isFalse
+import strikt.assertions.isNotNull
+import strikt.assertions.isNull
+import strikt.assertions.isSameInstanceAs
+import strikt.assertions.isTrue
+import java.time.Instant
 import java.util.concurrent.ThreadLocalRandom
 
 class TestParentIdCheckRule {
-    private val parentId = EventID.newBuilder().setId("test").build()
+    private val parentId = EventID.newBuilder().apply {
+        id = "test"
+        bookName = TEST_BOOK
+        scope = TEST_SCOPE
+        startTimestamp = Instant.now().toTimestamp()
+    }.build()
     private val connectionId = ConnectionID.newBuilder()
-            .setSessionAlias("test")
-            .build()
+        .setSessionAlias(TEST_SESSION_ALIAS)
+        .build()
     private val rule = ParentIdCheckRule(parentId, connectionId)
 
     @Test
     fun `finds match`() {
-        val message = message("test", Direction.FIRST, "test")
-                .setParentEventId(parentId)
-                .build()
+        val message = TransportMessageHolder(
+            createTransportMessage()
+                .setEventId(parentId.toTransport())
+                .build(), TEST_BOOK, TEST_SESSION_GROUP
+        )
 
         expect {
             that(rule.onMessage(message)).isTrue()
             that(rule.response)
-                    .isNotNull()
-                    .isSameInstanceAs(message)
+                .isNotNull()
+                .isSameInstanceAs(message)
         }
     }
 
     @Test
     fun `skips messages with different parent ID`() {
-        val message = message("test", Direction.FIRST, "test")
-                .setParentEventId(EventID.newBuilder().setId(ThreadLocalRandom.current().nextLong().toString()))
-                .build()
+        val message = TransportMessageHolder(
+            createTransportMessage()
+                .setEventId(
+                    EventId(
+                        ThreadLocalRandom.current().nextLong().toString(),
+                        TEST_BOOK,
+                        TEST_SCOPE,
+                        Instant.now()
+                    )
+                )
+                .build(), TEST_BOOK, TEST_SESSION_GROUP
+        )
 
         expect {
             that(rule.onMessage(message)).isFalse()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 
-public interface SubscriptionManager {
-    void register(Direction direction, Listener listener);
-
-    boolean unregister(Direction direction, Listener listener);
+public interface Listener {
+    void handle(MessageHolder message) throws Exception;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 
 package com.exactpro.th2.act;
 
-import java.util.Collection;
-import java.util.Objects;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 
 import javax.annotation.Nullable;
-
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageID;
+import java.util.Collection;
+import java.util.Objects;
 
 public abstract class AbstractMessageReceiver implements AutoCloseable {
     private final ResponseMonitor monitor;
@@ -35,7 +34,7 @@ public abstract class AbstractMessageReceiver implements AutoCloseable {
     public abstract void close();
 
     @Nullable
-    public abstract Message getResponseMessage();
+    public abstract MessageHolder getResponseMessage();
 
     public abstract Collection<MessageID> processedMessageIDs();
 

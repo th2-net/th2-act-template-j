@@ -1,20 +1,29 @@
-# th2 act template (3.9.0)
+# th2 act template (5.3.0)
 
 ## Overview
 
-Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or other components can call these functions via gRPC.
-Act can interact with conn (Connects), hands, check1s, other acts to execute its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2 component type allows frequently used script logic into it and then share it between all th2 components.
+Act is a passive th2 component with parameterized functions which is implemented as part of the test logic. Script or
+other components can call these functions via gRPC. Act can interact with codec , hands, check1s, other acts to execute
+its tasks. Information about the progress of the task is published to the estore th2 component via MQ pin. This th2
+component type allows frequently used script logic into it and then share it between all th2 components.
 
-This project is implemented gRPC API described in the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+This project is implemented gRPC API described in
+the [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
 
 Most of them consists of the next steps:
+
 1. Gets a gRPC request with parameters.
 2. Requests checkpoint from check1 via gRPC pin
-3. Sends the passed business message to Connect via mq pin 
-4. Waits the specific business message from Connect during specified timeout 
+3. Sends the passed business message to Codec via mq pin
+4. Waits the specific business message from Codec during specified timeout
 5. Returns responded business message with checkpoint
-
 ![picture](scheme.png)
+
+### Sending raw messages
+It is also possible to send raw messages ( containing metadata and having payload in original format ) directly to conn components without waiting while message will be encoded by codec and then sent to conn component.
+For that you need to:
+1. Send rpc request using `SendRawMessageRequest` and `sendRawMessage` rpc that is defined in [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+2. Transport group with `RawMessage` will be published to pins with `send_raw` attribute.
 
 ## Custom resources for infra-mgr
 
@@ -30,36 +39,107 @@ spec:
       connection-type: grpc
     - name: grpc_client_to_check1
       connection-type: grpc
-    - name: from_codec
+    - name: from_codec_transport
       connection-type: mq
-      attributes: [ "subscribe", "parsed", "oe" ]
-    - name: to_conn1
+      attributes:
+        - subscribe
+        - transport-group
+        - oe
+    - name: to_codec1_transport
       connection-type: mq
       attributes:
         - publish
-        - parsed
+        - send
+        - transport-group
       filters:
         - metadata:
             - field-name: session_alias
               expected-value: conn1_session_alias
               operation: EQUAL
-    - name: to_conn2
+    - name: to_codec2_transport
       connection-type: mq
       attributes:
         - publish
-        - parsed
+        - send
+        - transport-group
       filters:
         - metadata:
             - field-name: session_alias
               expected-value: conn2_session_alias
               operation: EQUAL
+    - name: to_conn1_transport
+      connection-type: mq
+      attributes:
+        - publish
+        - transport-group
+        - send_raw
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn1_session_alias
+              operation: EQUAL
+    - name: to_conn2_transport
+      connection-type: mq
+      attributes:
+        - publish
+        - transport-group
+        - send_raw
+      filters:
+        - metadata:
+            - field-name: session_alias
+              expected-value: conn1_session_alias
+              operation: EQUAL
 ```
+
 ## Descriptor gradle plugin
 
-Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows generating a th2 descriptor. CI should publish the project's docker image with the descriptor content as the value of the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
-
+Also we recommend to
+apply [th2-box-descriptor-generator plugin](https://github.com/th2-net/th2-box-descriptor-generator). It allows
+generating a th2 descriptor. CI should publish the project's docker image with the descriptor content as the value of
+the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
+
+### 5.3.0
++ Migrate to th2 gradle plugin `0.3.9` (th2-bom: `4.14.1`)
++ Updated:
+  + kotlin: `2.2.10`
+  + common: `5.16.1-dev`
+  + common-utils: `2.4.0-dev`
+  + grpc-act-template: `4.3.1`
+  + grpc-check1: `4.5.1`
+
+### 5.2.0
++ `multiSendMessage` method implemented
+
+### 5.1.1
++ Use pins with `send` pin attribute for parsed messages sends.
+
+### 5.1.0
++ Added RPC to send raw messages.
++ Updated grpc-act-template to `4.2.0`
+
+### 5.0.0
+
++ Migrated to th2 transport protocol
++ Updated bom to `4.5.0`
++ Updated kotlin to `1.8.22`
++ Updated common to `5.4.0`
++ Updated grpc-act-template to `4.1.0`
++ Updated grpc-check1 to `4.3.0`
++ Added common-utils `2.2.0`
+
+### 4.0.1
+
++ 3.9.0 merged
+
+### 4.0.0
+
++ Update `kotlin.jvm` version from `1.3.72` to `1.5.30`
++ Migration to books/pages cradle 4.0.0
+    + Update `th2-common` version from `3.26.4` to `4.0.0`
+    + Update `th2-grpc-act-template` version from `3.4.0` to `4.0.0`
+    + Update `th2-grpc-check1` version from `3.4.2` to `4.0.0`
 
 ### 3.9.0
 
@@ -68,6 +148,7 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 + th2-grpc-check to `3.8.0`
 + grpc-check1 updated to `3.8.0`
 + updated gradle to 7.6
+
 ### 3.8.0
 
 + Update `th2-grpc-act-template` version from `3.9.0` to `3.10.0`
@@ -109,5 +190,6 @@ Also we recommend to apply [th2-box-descriptor-generator plugin](https://github.
 
 + reads dictionaries from the /var/th2/config/dictionary folder.
 + uses mq_router, grpc_router, cradle_manager optional JSON configs from the /var/th2/config folder
-+ tries to load log4j.properties files from sources in order: '/var/th2/config', '/home/etc', configured path via cmd, default configuration
++ tries to load log4j.properties files from sources in order: '/var/th2/config', '/home/etc', configured path via cmd,
+  default configuration
 + update Cradle version. Introduce async API for storing events

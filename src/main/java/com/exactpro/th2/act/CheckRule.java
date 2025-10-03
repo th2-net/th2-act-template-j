@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,20 @@
  */
 package com.exactpro.th2.act;
 
-import java.util.Collection;
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 
 import javax.annotation.Nullable;
-
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageID;
+import java.util.Collection;
 
 public interface CheckRule {
     /**
      * Checks if the messages matches the rule
+     *
      * @param message the message to check
      * @return {@code true} if message matches the rule Otherwise, returns {@code false}
      */
-    boolean onMessage(Message message);
+    boolean onMessage(MessageHolder message);
 
     /**
      * The collections of {@link MessageID} that was processed by rule
@@ -37,8 +37,9 @@ public interface CheckRule {
 
     /**
      * Matched response
+     *
      * @return the matched response or {@code null}
      */
     @Nullable
-    Message getResponse();
+    MessageHolder getResponse();
 }

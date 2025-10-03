@@ -1,5 +1,5 @@
-/******************************************************************************
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+/*
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,32 +12,27 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- ******************************************************************************/
+ */
 package com.exactpro.th2.act;
 
-import java.util.Collection;
-import java.util.Objects;
-
-import javax.annotation.Nullable;
-
+import com.exactpro.th2.common.grpc.MessageID;
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction;
+import com.exactpro.th2.common.utils.message.MessageHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.Message;
-import com.exactpro.th2.common.grpc.MessageBatch;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.schema.message.MessageListener;
-import com.google.protobuf.TextFormat;
+import javax.annotation.Nullable;
+import java.util.Collection;
+import java.util.Objects;
 
 public class MessageReceiver extends AbstractMessageReceiver {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageReceiver.class);
 
     private final SubscriptionManager subscriptionManager;
     private final Direction direction;
-    private final MessageListener<MessageBatch> callback = this::processIncomingMessages;
+    private final Listener callback = this::processIncomingMessages;
     private final CheckRule checkRule;
-    private volatile Message firstMatch;
+    private volatile MessageHolder firstMatch;
 
     //FIXME: Add queue name
     public MessageReceiver(
@@ -59,7 +54,7 @@ public class MessageReceiver extends AbstractMessageReceiver {
 
     @Override
     @Nullable
-    public Message getResponseMessage() {
+    public MessageHolder getResponseMessage() {
         return firstMatch;
     }
 
@@ -68,19 +63,17 @@ public class MessageReceiver extends AbstractMessageReceiver {
         return checkRule.processedIDs();
     }
 
-    private void processIncomingMessages(String consumingTag, MessageBatch batch) {
+    private void processIncomingMessages(MessageHolder message) {
         try {
-            LOGGER.debug("Message received batch, size {}", batch.getSerializedSize());
-            for (Message message : batch.getMessagesList()) {
-                if (hasMatch()) {
-                    LOGGER.debug("The match was already found. Skip batch checking");
-                    break;
-                }
-                if (checkRule.onMessage(message)) {
-                    firstMatch = message;
-                    signalAboutReceived();
-                    LOGGER.debug("Found first match '{}'. Skip other messages", TextFormat.shortDebugString(message));
-                    break;
+            if (hasMatch()) {
+                LOGGER.debug("The match was already found. Skip message checking");
+                return;
+            }
+            if (checkRule.onMessage(message)) {
+                firstMatch = message;
+                signalAboutReceived();
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Found first match '{}'", message);
                 }
             }
         } catch (RuntimeException e) {
