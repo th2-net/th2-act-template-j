@@ -16,16 +16,25 @@
 
 package com.exactpro.th2.act;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 @SuppressWarnings("unused")
 public class Configuration {
 
     @JsonProperty("check1Enabled")
-    @SuppressWarnings("FieldMayBeFinal")
+    @JsonAlias({"check1Enabled", "check1-enabled"})
     private boolean check1Enabled = true;
 
-    public boolean check1Enabled() {
+    @JsonProperty("responseTimeout")
+    @JsonAlias({"responseTimeout", "response-timeout"})
+    private int responseTimeout = 10_000;
+
+    public boolean isCheck1Enabled() {
         return check1Enabled;
+    }
+
+    public int getResponseTimeout() {
+        return responseTimeout;
     }
 }

@@ -18,6 +18,8 @@ dependencies {
     implementation(libs.th2.grpc.act)
     implementation(libs.th2.grpc.check1)
 
+    implementation(libs.kotlin.logging)
+
     implementation("com.fasterxml.jackson.core:jackson-core")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
@@ -28,14 +30,52 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.strikt.core)
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.th2.junit.jupiter.integration)
+    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.platform:junit-platform-launcher") {
         because 'This artifact will not be added automatically since gradle 9.0. You can read more information here:' +
                 'https://docs.gradle.org/8.3/userguide/upgrading_version_8.html#test_framework_implementation_dependencies'
     }
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation testFixtures(libs.th2.common)
 }
 
-test.useJUnitPlatform()
 application.mainClass = "com.exactpro.th2.act.ActMain"
 dependencyCheck.suppressionFile = "suppressions.xml"
+
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("integration-test")
+    }
+}
+
+tasks.register("integrationTest", Test) {
+    group = "verification"
+    useJUnitPlatform {
+        includeTags("integration-test")
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+
+    if (isPodmanInstalled()) {
+        environment("DOCKER_HOST", "unix:///run/user/${getUid()}/podman/podman.sock")
+        environment("TESTCONTAINERS_RYUK_DISABLED", "true")
+    }
+}
+
+static def isPodmanInstalled() {
+    try {
+        def process = new ProcessBuilder("podman", "--version").start()
+        process.waitFor()
+        return process.exitValue() == 0
+    } catch (IOException ignored) {
+        println("podman isn't installed")
+        return false
+    }
+}
+
+static def getUid() {
+    new ProcessBuilder("id", "-u").start().inputStream.text.trim()
+}
