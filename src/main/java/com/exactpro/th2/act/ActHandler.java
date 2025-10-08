@@ -99,7 +99,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
 public class ActHandler extends ActImplBase {
-    private static final int DEFAULT_RESPONSE_TIMEOUT = 10_000;
     private static final String SEND_RAW_QUEUE_ATTRIBUTE = "send_raw";
     private static final String SEND_QUEUE_ATTRIBUTE = "send";
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
@@ -109,20 +108,23 @@ public class ActHandler extends ActImplBase {
     private final MessageRouter<EventBatch> eventBatchMessageRouter;
     private final MessageRouter<GroupBatch> messageRouter;
     private final SubscriptionManager subscriptionManager;
+    private final int responseTimeout;
 
     ActHandler(
             MessageRouter<GroupBatch> router,
             SubscriptionManager subscriptionManager,
             MessageRouter<EventBatch> eventBatchRouter,
-            @Nullable Check1Service check1Service) {
+            @Nullable Check1Service check1Service,
+            int responseTimeout) {
         this.messageRouter = requireNonNull(router, "'Router' parameter");
         this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
         this.check1Service = check1Service;
         this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
+        this.responseTimeout = responseTimeout;
     }
 
-    private static long getTimeout(Deadline deadline) {
-        return deadline == null ? DEFAULT_RESPONSE_TIMEOUT : deadline.timeRemaining(MILLISECONDS);
+    private long getTimeout(Deadline deadline) {
+        return deadline == null ? responseTimeout : deadline.timeRemaining(MILLISECONDS);
     }
 
     private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {

@@ -35,7 +35,8 @@ metadata:
 spec:
   type: th2-act
   customConfig:
-    check1Enabled: true
+    response-timeout: 10000
+    check1-enabled: true
   pins:
     mq:
       publishers:
@@ -82,8 +83,12 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 
 ## Release Notes
 
+### next
+
++ Provided `response-timeout` option
+
 ### 5.3.0
-+ Provided `check1Enabled` option
++ Provided `check1-enabled` option
 + Migrate to th2 gradle plugin `0.3.9` (th2-bom: `4.14.1`)
 + Updated:
   + kotlin: `2.2.10`
