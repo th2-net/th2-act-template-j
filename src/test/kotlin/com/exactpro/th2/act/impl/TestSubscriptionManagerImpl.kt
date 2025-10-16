@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package com.exactpro.th2.act.impl
 
-import com.exactpro.th2.act.Listener
+import com.exactpro.th2.act.MessageListener
 import com.exactpro.th2.act.util.TEST_BOOK
 import com.exactpro.th2.act.util.TEST_SESSION_GROUP
 import com.exactpro.th2.act.util.createTransportMessage
@@ -44,7 +44,7 @@ class TestSubscriptionManagerImpl {
 
     @Test
     fun `correctly distributes the batches`() {
-        val listeners: Map<Direction, Listener> = mapOf(
+        val listeners: Map<Direction, MessageListener> = mapOf(
             Direction.INCOMING to mock { },
             Direction.OUTGOING to mock { }
         )
@@ -89,7 +89,7 @@ class TestSubscriptionManagerImpl {
     @ParameterizedTest
     @EnumSource(value = Direction::class)
     fun `removes listener`(direction: Direction) {
-        val listener = mock<Listener> { }
+        val listener = mock<MessageListener> { }
         manager.register(direction, listener)
 
         manager.unregister(direction, listener)

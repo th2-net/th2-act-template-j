@@ -216,7 +216,7 @@ public class ActHandler extends ActHandlerBase {
             }
 
             try {
-                sendMessage(request.getMessage(), parentId);
+                sendMessage(parentId, request.getMessage());
             } catch (Exception ex) {
                 createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -589,7 +589,7 @@ public class ActHandler extends ActHandlerBase {
         long startTime = System.currentTimeMillis();
 
         try {
-            sendMessage(message, parentEventId);
+            sendMessage(parentEventId, message);
             return true;
         } catch (IOException e) {
             LOGGER.error("Could not send message to queue", e);

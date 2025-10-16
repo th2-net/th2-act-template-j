@@ -17,9 +17,8 @@
 package com.exactpro.th2.act
 
 import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase
-import com.exactpro.th2.act.grpc.PlaceMessageRequest
-import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder
-import com.exactpro.th2.act.grpc.PlaceMessageResponse
+import com.exactpro.th2.act.grpc.PlaceHttpRequest
+import com.exactpro.th2.act.grpc.PlaceHttpResponse
 import com.exactpro.th2.check1.grpc.Check1Service
 import com.exactpro.th2.check1.grpc.CheckpointRequest
 import com.exactpro.th2.common.event.Event
@@ -40,14 +39,15 @@ import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction.INCOMING
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageGroup
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
 import com.exactpro.th2.common.utils.event.toTransport
 import com.exactpro.th2.common.utils.message.MessageHolder
-import com.exactpro.th2.common.utils.message.getTreeTable
 import com.exactpro.th2.common.utils.message.toTransportBuilder
 import com.exactpro.th2.common.utils.message.transport.toBatch
 import com.exactpro.th2.common.utils.message.transport.toGroup
 import com.exactpro.th2.common.utils.message.transport.toTreeTable
+import com.google.protobuf.MessageOrBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Context
 import io.grpc.stub.StreamObserver
@@ -60,6 +60,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import com.exactpro.th2.common.grpc.Event as ProtoEvent
 
+@Suppress("unused")
 open class ActHandlerBase(
     protected val messageRouter: MessageRouter<GroupBatch>,
     private val eventRouter: MessageRouter<EventBatch>,
@@ -69,85 +70,107 @@ open class ActHandlerBase(
 ) : ActImplBase() {
 
     override fun placeHttpRequest(
-        request: PlaceMessageRequest,
-        responseObserver: StreamObserver<PlaceMessageResponse>
+        request: PlaceHttpRequest,
+        response: StreamObserver<PlaceHttpResponse>
     ) {
-        handleRequest("placeHttpRequest", request, responseObserver) { actName, start, rootEventId, checkpoint ->
-            val metadata = request.message.metadata
-            require(metadata.messageType == MSG_TYPE_HTTP_REQUEST) {
-                "Unsupported request message type '${metadata.messageType}', expected '$MSG_TYPE_HTTP_REQUEST'"
+        handleRequest(
+            "placeHttpRequest",
+            request.parentEventId,
+            request,
+            response,
+            ::errorHttpResponse
+        ) { actName, start ->
+            require(request.httpHeader != Message.getDefaultInstance() || request.httpBody != Message.getDefaultInstance()) {
+                "'http header' or 'http body' must be filled in"
+            }
+            var sessionAlias = ""
+            val messages = mutableListOf<Message>()
+            if (request.httpHeader != Message.getDefaultInstance()) {
+                val metadata = request.httpHeader.metadata
+                require(metadata.messageType == MSG_TYPE_HTTP_REQUEST) {
+                    "Unsupported request message type '${metadata.messageType}', expected '$MSG_TYPE_HTTP_REQUEST'"
+                }
+                // TODO: implement checks
+                sessionAlias = request.httpHeader.metadata.id.connectionId.sessionAlias
+                messages.add(request.httpHeader)
+            }
+            if (request.httpBody != Message.getDefaultInstance()) {
+                // TODO: implement checks
+                sessionAlias = request.httpBody.metadata.id.connectionId.sessionAlias
+                messages.add(request.httpBody)
             }
 
-            sendMessage(request.message, rootEventId)
+            val rootEventId = rootEvent(
+                start,
+                actName,
+                sessionAlias,
+                request.description,
+                request.parentEventId
+            ).id
+            val checkpoint = registerCheckPoint(rootEventId)
 
-            AwaitContext(setOf(INCOMING)) { message ->
-                if (message.messageType == MSG_TYPE_HTTP_RESPONSE && message.parentEventId == rootEventId) {
-                    result(message)
+            sendMessages(rootEventId, messages)
+
+            AwaitGroupContext(setOf(INCOMING)) { group ->
+                if (group.eventId == rootEventId) {
+                    result(group)
                 }
             }.use { context ->
                 val timeout = calculateTimeout()
                 context.await(timeout)?.let { result ->
-                    val status = if (result.getSimple("statusCode") == "200") PASSED else FAILED
+                    val results = result.asSequence().filterNotNull().toList()
+
+                    val status = if (results.first().getSimple("statusCode") == "200") PASSED else FAILED
                     Event.start()
-                        .name("Received '${result.messageType}' response message")
-                        .type("message")
+                        .name("Received '${results.map(MessageHolder::messageType)}' response messages")
+                        .type("messages")
                         .status(status)
-                        .bodyData(result.getTreeTable())
+                        .bodyData(result.toTreeTable())
                         .messageID(result.id)
                         .toBatchProto(rootEventId)
                         .also(::sendEventBatch)
-                    responseObserver.messageResponse(result.protoMessage, checkpoint, status.toResponseStatus())
+                    response.messageResponse(results, checkpoint, status.toResponseStatus())
                 } ?: run {
                     val bodyData = treeTable {
                         collection("PASSED on:") {
-                            row("statusCode", 200)
+                            rowColumn("statusCode", 200)
                         }
                     }
                     noResponseEvent(start, actName, rootEventId, bodyData, context.messageIds)
-                    responseObserver.errorResponse("No response message has been received in '$timeout' ms")
+                    errorHttpResponse(response, "No response message has been received in '$timeout' ms")
                 }
             }
         }
     }
 
-    protected fun handleRequest(
+    protected fun <O> handleRequest(
         actName: String,
-        request: PlaceMessageRequestOrBuilder,
-        response: StreamObserver<PlaceMessageResponse>,
-        block: (actName: String, start: Instant, rootEventId: EventID, checkpoint: Checkpoint) -> Unit
+        eventId: EventID,
+        request: MessageOrBuilder,
+        response: StreamObserver<O>,
+        onErrorResponse: StreamObserver<O>.(message: String) -> Unit,
+        block: (actName: String, start: Instant) -> Unit
     ) {
         val start = Instant.now()
         try {
             LOGGER.debug { "$actName request: ${request.toJson()}" }
-            val rootEventId = rootEvent(
-                start,
-                actName,
-                request.message.metadata.id.connectionId.sessionAlias,
-                request.description,
-                request.parentEventId
-            ).id
-            try {
-                val checkpoint = registerCheckPoint(rootEventId)
-                block(actName, start, rootEventId, checkpoint)
-            } catch (e: Exception) {
-                val text = "Failed to '$actName' method handle"
-                LOGGER.error(e) { text }
-                errorEvent(start, actName, rootEventId, e)
-                response.errorResponse("$text: ${e.message}")
-            }
+            block(actName, start)
         } catch (e: Exception) {
             val text = "Failed to prepare event for '$actName' method handling"
             LOGGER.error(e) { text }
-            errorEvent(start, actName, request.parentEventId, e)
-            response.errorResponse("$text: ${e.message}")
+            errorEvent(start, actName, eventId, e)
+            response.onErrorResponse("$text: ${e.message}")
         } finally {
             LOGGER.debug { "$actName has finished" }
         }
     }
 
-    protected fun StreamObserver<PlaceMessageResponse>.errorResponse(message: String) {
-        onNext(
-            PlaceMessageResponse.newBuilder()
+    protected fun errorHttpResponse(
+        observer: StreamObserver<PlaceHttpResponse>,
+        message: String
+    ) {
+        observer.onNext(
+            PlaceHttpResponse.newBuilder()
                 .setStatus(
                     RequestStatus.newBuilder()
                         .setStatus(ERROR)
@@ -155,17 +178,22 @@ open class ActHandlerBase(
                         .build()
                 ).build()
         )
-        onCompleted()
+        observer.onCompleted()
     }
 
-    protected fun StreamObserver<PlaceMessageResponse>.messageResponse(
-        message: Message,
+    protected fun StreamObserver<PlaceHttpResponse>.messageResponse(
+        messages: List<MessageHolder>,
         checkpoint: Checkpoint,
         status: RequestStatus.Status
     ) {
         onNext(
-            PlaceMessageResponse.newBuilder().apply {
-                responseMessage = message
+            PlaceHttpResponse.newBuilder().apply {
+                if (messages.isNotEmpty()) {
+                    httpHeader = messages[0].protoMessage
+                    if (messages.size > 1) {
+                        httpBody = messages[1].protoMessage
+                    }
+                }
                 checkpointId = checkpoint
                 statusBuilder.setStatus(status)
             }.build()
@@ -206,13 +234,23 @@ open class ActHandlerBase(
             .also(::sendEventBatch)
     }
 
-    protected fun sendMessageEvent(message: ParsedMessage, parentEventId: EventID) {
+    protected fun sendMessageEvent(parentEventId: EventID, message: ParsedMessage) {
         Event.start()
             .name("Send '${message.type}' message to connectivity")
             .type("Outgoing message")
             .status(PASSED)
             .bodyData(message.toTreeTable())
             .toBatchProto(parentEventId)
+            .also(::sendEventBatch)
+    }
+
+    protected fun sendMessagesEvent(eventId: EventID, messages: List<ParsedMessage>) {
+        Event.start()
+            .name("Send '${messages.map(ParsedMessage::type)}' messages to connectivity")
+            .type("Outgoing message")
+            .status(PASSED)
+            .bodyData(messages.toTreeTable())
+            .toBatchProto(eventId)
             .also(::sendEventBatch)
     }
 
@@ -254,7 +292,7 @@ open class ActHandlerBase(
     }
 
     @Throws(IOException::class)
-    protected fun sendMessage(message: Message, eventId: EventID) {
+    protected fun sendMessage(eventId: EventID, message: Message) {
         catching {
             message.toTransportBuilder()
                 .setEventId(eventId.toTransport())
@@ -270,8 +308,28 @@ open class ActHandlerBase(
                 "Send '${message.messageType}' message with '${eventId.toJson()}' parent event failure",
                 it
             )
-        }.also { sendMessageEvent(it, eventId) }
+        }.also { sendMessageEvent(eventId, it) }
+    }
 
+    @Throws(IOException::class)
+    protected fun sendMessages(eventId: EventID, messages: List<Message>) {
+        catching {
+            require(messages.isNotEmpty()) { "Message list can't be empty" }
+
+            val transportEventId = eventId.toTransport()
+            messages.map { it.toTransportBuilder().setEventId(transportEventId).build() }.apply {
+                val id = messages.first().metadata.id
+                messageRouter.send(
+                    MessageGroup(this).toBatch(id.bookName, id.connectionId.sessionGroup),
+                    SEND_QUEUE_ATTRIBUTE
+                )
+            }
+        }.getOrElse {
+            throw IllegalStateException(
+                "Send '${messages.size}' messages with '${eventId.toJson()}' parent event failure",
+                it
+            )
+        }.also { sendMessagesEvent(eventId, it) }
     }
 
     protected fun registerCheckPoint(
@@ -294,10 +352,10 @@ open class ActHandlerBase(
         )
     }
 
-    inner class AwaitContext(
+    inner class AwaitMessageContext(
         private val directions: Set<Direction>,
-        private val rule: AwaitContext.(message: MessageHolder) -> Unit,
-    ) : AutoCloseable, Listener {
+        private val rule: AwaitMessageContext.(entity: MessageHolder) -> Unit,
+    ) : AutoCloseable, MessageListener {
         private val lock = ReentrantLock()
         private val condition = lock.newCondition()
 
@@ -337,6 +395,49 @@ open class ActHandlerBase(
         }
     }
 
+    inner class AwaitGroupContext(
+        private val directions: Set<Direction>,
+        private val rule: AwaitGroupContext.(entity: GroupHolder) -> Unit,
+    ) : AutoCloseable, GroupListener {
+        private val lock = ReentrantLock()
+        private val condition = lock.newCondition()
+
+        private lateinit var resultGroup: GroupHolder
+
+        val messageIds = CopyOnWriteArrayList<MessageID>()
+
+        init {
+            require(directions.isNotEmpty()) { "'directions' can't be empty" }
+            directions.forEach { subscriptionManager.register(it, this) }
+        }
+
+        override fun handle(group: GroupHolder) {
+            messageIds.add(group.id)
+            rule(group)
+        }
+
+        override fun close() {
+            directions.forEach { subscriptionManager.unregister(it, this) }
+        }
+
+        fun result(value: GroupHolder) = lock.withLock {
+            resultGroup = value
+            condition.signalAll()
+        }
+
+        fun await(timeout: Long): GroupHolder? = lock.withLock {
+            if (this::resultGroup.isInitialized) {
+                LOGGER.debug { "Monitor has been notified before it has started to await a response" }
+                return@withLock resultGroup
+            }
+            if (!condition.await(timeout, TimeUnit.MILLISECONDS)) {
+                LOGGER.info { "Timeout ($timeout ms) elapsed before monitor was notified" }
+                return@withLock null
+            }
+            return@withLock resultGroup
+        }
+    }
+
     protected fun calculateTimeout(): Long =
         Context.current().getDeadline()?.timeRemaining(TimeUnit.MILLISECONDS) ?: responseTimeout.toLong()
 
@@ -345,7 +446,6 @@ open class ActHandlerBase(
         protected const val SEND_QUEUE_ATTRIBUTE: String = "send"
 
         private const val MSG_TYPE_HTTP_REQUEST = "Request"
-        private const val MSG_TYPE_HTTP_RESPONSE = "Response"
 
         private val LOGGER = KotlinLogging.logger { }
 

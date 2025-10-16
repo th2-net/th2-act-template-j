@@ -104,38 +104,6 @@ abstract class ActIntegrationTest {
         EXECUTOR.shutdownGracefully()
     }
 
-    protected fun request(
-        id: MessageID,
-        eventId: EventID,
-        description: String = "test-description",
-        type: String = "NewOrderSingle",
-        body: Map<String, Any> = emptyMap(),
-    ): PlaceMessageRequest = PlaceMessageRequest.newBuilder()
-        .setDescription(description)
-        .setParentEventId(eventId)
-        .apply {
-            messageBuilder.apply {
-                messageType = type
-                metadataBuilder.id = id
-                body.forEach { (key, value) ->
-                    addField(key, value.toValue())
-                }
-            }
-        }.build()
-
-    protected fun message(
-        id: MessageId,
-        eventId: EventId? = null,
-        type: String = "ExecutionReport",
-        body: Map<String, Any> = emptyMap(),
-    ): ParsedMessage = ParsedMessage.builder()
-        .setId(id)
-        .setType(type)
-        .setBody(body)
-        .apply {
-            eventId?.let(this::setEventId)
-        }.build()
-
     companion object {
         protected const val SESSION_ALIAS = "test-session-alias"
         protected const val OPT_RESPONSE_TIMEOUT = 1_000L
@@ -169,8 +137,43 @@ abstract class ActIntegrationTest {
         }
 
         @JvmStatic
+        @Suppress("unused")
         protected fun <T> withDeadline(duration: Long = 1, units: TimeUnit = TimeUnit.SECONDS, block: () -> T): T =
             Context.current()
                 .withDeadline(Deadline.after(duration, units), EXECUTOR).call(block)
+
+        @JvmStatic
+        protected fun request(
+            id: MessageID,
+            eventId: EventID,
+            description: String = "test-description",
+            type: String = "NewOrderSingle",
+            body: Map<String, Any> = emptyMap(),
+        ): PlaceMessageRequest = PlaceMessageRequest.newBuilder()
+            .setDescription(description)
+            .setParentEventId(eventId)
+            .apply {
+                messageBuilder.apply {
+                    messageType = type
+                    metadataBuilder.id = id
+                    body.forEach { (key, value) ->
+                        addField(key, value.toValue())
+                    }
+                }
+            }.build()
+
+        @JvmStatic
+        protected fun message(
+            id: MessageId,
+            eventId: EventId? = null,
+            type: String = "ExecutionReport",
+            body: Map<String, Any> = emptyMap(),
+        ): ParsedMessage = ParsedMessage.builder()
+            .setId(id)
+            .setType(type)
+            .setBody(body)
+            .apply {
+                eventId?.let(this::setEventId)
+            }.build()
     }
 }

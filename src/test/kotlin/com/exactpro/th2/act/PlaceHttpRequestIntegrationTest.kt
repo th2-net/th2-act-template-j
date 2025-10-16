@@ -16,14 +16,19 @@
 
 package com.exactpro.th2.act
 
+import com.exactpro.th2.act.grpc.PlaceHttpRequest
 import com.exactpro.th2.act.integration.ActIntegrationTest
 import com.exactpro.th2.act.integration.ProtoDirection
 import com.exactpro.th2.act.integration.TransportDirection
 import com.exactpro.th2.common.annotations.IntegrationTest
 import com.exactpro.th2.common.grpc.Checkpoint
+import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus
 import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RequestStatus
+import com.exactpro.th2.common.message.addField
+import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.schema.factory.CommonFactory
 import com.exactpro.th2.common.utils.event.toTransport
 import com.exactpro.th2.common.utils.message.toTransport
@@ -94,10 +99,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '$TYPE_REQUEST' message to connectivity"
+            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isNotEqualTo eventId and {
@@ -117,7 +122,8 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
             }
             get { this.checkpointId } isEqualTo Checkpoint.getDefaultInstance()
-            get { this.responseMessage } isEqualTo Message.getDefaultInstance()
+            get { this.httpHeader } isEqualTo Message.getDefaultInstance()
+            get { this.httpBody } isEqualTo Message.getDefaultInstance()
         }
         env.asserQueues()
     }
@@ -178,10 +184,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '$TYPE_REQUEST' message to connectivity"
+            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isNotEqualTo eventId and {
@@ -190,10 +196,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Received '$TYPE_RESPONSE' response message"
-            get { this.type } isEqualTo "message"
+            get { this.name } isEqualTo "Received '[$TYPE_RESPONSE]' response messages"
+            get { this.type } isEqualTo "messages"
             get { this.attachedMessageIdsList } isEqualTo listOf(erMessage.id.toProto(env.book, SESSION_ALIAS))
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"$FIELD_STATUS_CODE":{"type":"row","columns":{"fieldValue":"$HTTP_CODE_OK"}}}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_RESPONSE"}},"body":{"type":"collection","rows":{"$FIELD_STATUS_CODE":{"type":"row","columns":{"fieldValue":"$HTTP_CODE_OK"}}}}}}}}]"""
         }
         expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
             get { this.status } and {
@@ -201,7 +207,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 get { this.message } isEqualTo ""
             }
             get { this.checkpointId } isEqualTo env.checkpoint
-            get { this.responseMessage } and {
+            get { this.httpHeader } and {
                 get { this.metadata } and {
                     get { this.id } and {
                         get { this.bookName } isEqualTo env.book
@@ -274,10 +280,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '$TYPE_REQUEST' message to connectivity"
+            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isNotEqualTo eventId and {
@@ -286,10 +292,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.FAILED
-            get { this.name } isEqualTo "Received '$TYPE_RESPONSE' response message"
-            get { this.type } isEqualTo "message"
+            get { this.name } isEqualTo "Received '[$TYPE_RESPONSE]' response messages"
+            get { this.type } isEqualTo "messages"
             get { this.attachedMessageIdsList } isEqualTo listOf(erMessage.id.toProto(env.book, SESSION_ALIAS))
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"$FIELD_STATUS_CODE":{"type":"row","columns":{"fieldValue":"$HTTP_CODE_BAD"}}}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_RESPONSE"}},"body":{"type":"collection","rows":{"$FIELD_STATUS_CODE":{"type":"row","columns":{"fieldValue":"$HTTP_CODE_BAD"}}}}}}}}]"""
         }
         expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
             get { this.status } and {
@@ -297,7 +303,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 get { this.message } isEqualTo ""
             }
             get { this.checkpointId } isEqualTo env.checkpoint
-            get { this.responseMessage } and {
+            get { this.httpHeader } and {
                 get { this.metadata } and {
                     get { this.id } and {
                         get { this.bookName } isEqualTo env.book
@@ -320,5 +326,24 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         private const val HTTP_CODE_OK = "200"
         private const val HTTP_CODE_BAD = "404"
         private const val FIELD_STATUS_CODE = "statusCode"
+
+        private fun request(
+            id: MessageID,
+            eventId: EventID,
+            description: String = "test-description",
+            type: String = TYPE_REQUEST,
+            payloadBody: Map<String, Any> = emptyMap(),
+        ): PlaceHttpRequest = PlaceHttpRequest.newBuilder()
+            .setDescription(description)
+            .setParentEventId(eventId)
+            .apply {
+                httpBodyBuilder.apply {
+                    messageType = type
+                    metadataBuilder.id = id
+                    payloadBody.forEach { (key, value) ->
+                        addField(key, value.toValue())
+                    }
+                }
+            }.build()
     }
 }
