@@ -28,7 +28,6 @@ import com.exactpro.th2.common.event.IBodyData
 import com.exactpro.th2.common.grpc.Checkpoint
 import com.exactpro.th2.common.grpc.EventBatch
 import com.exactpro.th2.common.grpc.EventID
-import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RequestStatus
 import com.exactpro.th2.common.grpc.RequestStatus.Status.ERROR
@@ -39,10 +38,14 @@ import com.exactpro.th2.common.schema.message.MessageRouter
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Direction.INCOMING
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Message
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageGroup
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage
 import com.exactpro.th2.common.utils.event.toTransport
 import com.exactpro.th2.common.utils.message.MessageHolder
+import com.exactpro.th2.common.utils.message.sessionAlias
+import com.exactpro.th2.common.utils.message.sessionGroup
 import com.exactpro.th2.common.utils.message.toTransportBuilder
 import com.exactpro.th2.common.utils.message.transport.toBatch
 import com.exactpro.th2.common.utils.message.transport.toGroup
@@ -59,6 +62,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import com.exactpro.th2.common.grpc.Event as ProtoEvent
+import com.exactpro.th2.common.grpc.Message as ProtoMessage
 
 @Suppress("unused")
 open class ActHandlerBase(
@@ -79,36 +83,41 @@ open class ActHandlerBase(
             request,
             { text -> errorHttpResponse(response, text) }
         ) { actName, start ->
-            require(request.httpHeader != Message.getDefaultInstance() || request.httpBody != Message.getDefaultInstance()) {
+            require(request.hasHttpHeader() || request.hasHttpBody()) {
                 "'http header' or 'http body' must be filled in"
             }
             var sessionAlias = ""
-            val messages = mutableListOf<Message>()
-            if (request.httpHeader != Message.getDefaultInstance()) {
+            var sessionGroup = ""
+            val messages = mutableListOf<Message.Builder<*>>()
+            if (request.hasHttpHeader()) {
                 val metadata = request.httpHeader.metadata
                 require(metadata.messageType == MSG_TYPE_HTTP_REQUEST) {
                     "Unsupported request message type '${metadata.messageType}', expected '$MSG_TYPE_HTTP_REQUEST'"
                 }
-                // TODO: implement checks
-                sessionAlias = request.httpHeader.metadata.id.connectionId.sessionAlias
-                messages.add(request.httpHeader)
+                if (request.hasHttpBody() && request.httpBody.hasMessage()) {
+                    require(metadata.protocol.isNotBlank()) {
+                        "Http header message protocol must not be blank"
+                    }
+                }
+                sessionAlias = metadata.id.connectionId.sessionAlias
+                sessionGroup = metadata.id.connectionId.sessionGroup
+                messages.add(request.httpHeader.toTransportBuilder())
             }
-            if (request.httpBody != Message.getDefaultInstance()) {
-                // TODO: implement checks
-                sessionAlias = request.httpBody.metadata.id.connectionId.sessionAlias
-                messages.add(request.httpBody)
+            if (request.hasHttpBody()) {
+                val httpBody = request.httpBody
+                httpBody.sessionAlias?.let { sessionAlias = it }
+                httpBody.sessionGroup?.let { sessionGroup = it }
+                when {
+                    httpBody.hasMessage() -> messages.add(httpBody.message.toTransportBuilder())
+                    httpBody.hasRawMessage() -> messages.add(httpBody.rawMessage.toTransportBuilder())
+                    else -> error("Unsupported message kind: ${httpBody.kindCase}")
+                }
             }
 
-            val rootEventId = rootEvent(
-                start,
-                actName,
-                sessionAlias,
-                request.description,
-                request.parentEventId
-            ).id
+            val rootEventId = rootEvent(start, actName, sessionAlias, request.description, request.parentEventId).id
             val checkpoint = registerCheckPoint(rootEventId)
 
-            sendMessages(rootEventId, messages)
+            sendMessages(rootEventId, messages, sessionGroup)
 
             AwaitGroupContext(setOf(INCOMING)) { group ->
                 if (group.eventId == rootEventId) {
@@ -242,9 +251,17 @@ open class ActHandlerBase(
             .also(::sendEventBatch)
     }
 
-    protected fun sendMessagesEvent(eventId: EventID, messages: List<ParsedMessage>) {
+    protected fun sendMessagesEvent(eventId: EventID, messages: List<Message<*>>) {
+        val messageDescription = messages.joinToString(separator = ",", prefix = "[", postfix = "]") {
+            when (it) {
+                is ParsedMessage -> "parsed(${it.type})"
+                is RawMessage -> "raw(${it.body.readableBytes()}B)"
+                else -> "${it.javaClass.simpleName}"
+            }
+        }
+
         Event.start()
-            .name("Send '${messages.map(ParsedMessage::type)}' messages to connectivity")
+            .name("Send '$messageDescription' messages to connectivity")
             .type("Outgoing message")
             .status(PASSED)
             .bodyData(messages.toTreeTable())
@@ -290,7 +307,7 @@ open class ActHandlerBase(
     }
 
     @Throws(IOException::class)
-    protected fun sendMessage(eventId: EventID, message: Message) {
+    protected fun sendMessage(eventId: EventID, message: ProtoMessage) {
         catching {
             message.toTransportBuilder()
                 .setEventId(eventId.toTransport())
@@ -310,15 +327,14 @@ open class ActHandlerBase(
     }
 
     @Throws(IOException::class)
-    protected fun sendMessages(eventId: EventID, messages: List<Message>) {
+    protected fun sendMessages(eventId: EventID, messages: List<Message.Builder<*>>, sessionGroup: String) {
         catching {
             require(messages.isNotEmpty()) { "Message list can't be empty" }
 
             val transportEventId = eventId.toTransport()
-            messages.map { it.toTransportBuilder().setEventId(transportEventId).build() }.apply {
-                val id = messages.first().metadata.id
+            messages.map { it.setEventId(transportEventId).build() }.apply {
                 messageRouter.send(
-                    MessageGroup(this).toBatch(id.bookName, id.connectionId.sessionGroup),
+                    MessageGroup(this).toBatch(eventId.bookName, sessionGroup),
                     SEND_QUEUE_ATTRIBUTE
                 )
             }

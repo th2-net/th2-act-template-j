@@ -99,7 +99,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST)]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
             get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
@@ -184,7 +184,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST)]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
             get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
@@ -280,7 +280,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.parentId } isEqualTo actEvent.id
             get { this.status } isEqualTo EventStatus.SUCCESS
-            get { this.name } isEqualTo "Send '[$TYPE_REQUEST]' messages to connectivity"
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST)]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
             get { this.attachedMessageIdsList }.isEmpty()
             get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"0":{"type":"collection","rows":{"type":{"type":"row","columns":{"fieldValue":"$TYPE_REQUEST"}}}}}}]"""
@@ -338,10 +338,12 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             .setParentEventId(eventId)
             .apply {
                 httpBodyBuilder.apply {
-                    messageType = type
-                    metadataBuilder.id = id
-                    payloadBody.forEach { (key, value) ->
-                        addField(key, value.toValue())
+                    messageBuilder.apply {
+                        messageType = type
+                        metadataBuilder.id = id
+                        payloadBody.forEach { (key, value) ->
+                            addField(key, value.toValue())
+                        }
                     }
                 }
             }.build()

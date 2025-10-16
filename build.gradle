@@ -26,6 +26,9 @@ dependencies {
     implementation(libs.th2.common.utils)
     implementation(libs.th2.grpc.act)
     implementation(libs.th2.grpc.check1)
+    implementation("io.netty:netty-codec") {
+        because("RawMessage.body is encoded to Base64 in BodyDataUtils")
+    }
 
     implementation(libs.kotlin.logging)
 

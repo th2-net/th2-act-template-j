@@ -21,12 +21,15 @@ import com.exactpro.th2.common.event.bean.TreeTableEntry
 import com.exactpro.th2.common.event.bean.builder.CollectionBuilder
 import com.exactpro.th2.common.event.bean.builder.RowBuilder
 import com.exactpro.th2.common.event.bean.builder.TreeTableBuilder
-import com.exactpro.th2.common.grpc.Message
+import com.exactpro.th2.common.grpc.Message as ProtoMessage
 import com.exactpro.th2.common.grpc.Value
 import com.exactpro.th2.common.message.toJson
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Message
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage
 import com.exactpro.th2.common.utils.message.MessageTableColumn
 import com.exactpro.th2.common.utils.message.transport.convertToString
+import io.netty.handler.codec.base64.Base64
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
@@ -69,8 +72,34 @@ fun List<ParsedMessage>.toTreeTable(): TreeTable = treeTable {
     }
 }
 
+fun List<Message<*>>.toTreeTable(): TreeTable = treeTable {
+    forEachIndexed { index, message ->
+        collection(index.toString()) {
+            if (message is ParsedMessage && message.type.isNotBlank()) rowColumn("type", message.type)
+            if (message.protocol.isNotBlank()) rowColumn("protocol", message.protocol)
+            if (message.metadata.isNotEmpty()) {
+                collection("properties") {
+                    for ((key, value) in message.metadata) {
+                        row(key, value.toTreeTableEntry())
+                    }
+                }
+            }
+            if (message is ParsedMessage && message.body.isNotEmpty()) {
+                collection("body") {
+                    for ((key, value) in message.body) {
+                        row(key, value.toTreeTableEntry())
+                    }
+                }
+            }
+            if (message is RawMessage && message.body.readableBytes() > 0) {
+                rowColumn("body", Base64.encode(message.body, false).toString(Charsets.UTF_8))
+            }
+        }
+    }
+}
+
 @JvmName("toTreeTableProtobuf")
-fun List<Message>.toTreeTable(): TreeTable = treeTable {
+fun List<ProtoMessage>.toTreeTable(): TreeTable = treeTable {
     forEachIndexed { index, message ->
         collection(index.toString()) {
             if (message.metadata.messageType.isNotBlank()) rowColumn("type", message.metadata.messageType)
