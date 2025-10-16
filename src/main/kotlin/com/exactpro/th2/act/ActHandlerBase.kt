@@ -77,8 +77,7 @@ open class ActHandlerBase(
             "placeHttpRequest",
             request.parentEventId,
             request,
-            response,
-            ::errorHttpResponse
+            { text -> errorHttpResponse(response, text) }
         ) { actName, start ->
             require(request.httpHeader != Message.getDefaultInstance() || request.httpBody != Message.getDefaultInstance()) {
                 "'http header' or 'http body' must be filled in"
@@ -143,13 +142,12 @@ open class ActHandlerBase(
         }
     }
 
-    protected fun <O> handleRequest(
+    protected fun handleRequest(
         actName: String,
         eventId: EventID,
         request: MessageOrBuilder,
-        response: StreamObserver<O>,
-        onErrorResponse: StreamObserver<O>.(message: String) -> Unit,
-        block: (actName: String, start: Instant) -> Unit
+        onError: (message: String) -> Unit,
+        block: (actName: String, start: Instant) -> Unit,
     ) {
         val start = Instant.now()
         try {
@@ -159,7 +157,7 @@ open class ActHandlerBase(
             val text = "Failed to prepare event for '$actName' method handling"
             LOGGER.error(e) { text }
             errorEvent(start, actName, eventId, e)
-            response.onErrorResponse("$text: ${e.message}")
+            onError("$text: ${e.message}")
         } finally {
             LOGGER.debug { "$actName has finished" }
         }
