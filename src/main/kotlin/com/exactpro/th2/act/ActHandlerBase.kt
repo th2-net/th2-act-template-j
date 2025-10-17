@@ -83,21 +83,21 @@ open class ActHandlerBase(
             request,
             { text -> errorHttpResponse(response, text) }
         ) { actName, start ->
-            require(request.hasHttpHeader() || request.hasHttpBody()) {
+            require(request.hasHttpHeader() || request.hasHttpPayload()) {
                 "'http header' or 'http body' must be filled in"
             }
             var sessionAlias = ""
             var sessionGroup = ""
             val pinAttribute = when {
-                request.hasHttpHeader() && !request.hasHttpBody() -> SEND_HTTP_QUEUE_ATTRIBUTE
-                !request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasMessage() -> SEND_QUEUE_ATTRIBUTE
-                !request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
-                request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasMessage() -> SEND_QUEUE_ATTRIBUTE
-                request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                request.hasHttpHeader() && !request.hasHttpPayload() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                !request.hasHttpHeader() && request.hasHttpPayload() && request.httpPayload.hasMessage() -> SEND_QUEUE_ATTRIBUTE
+                !request.hasHttpHeader() && request.hasHttpPayload() && request.httpPayload.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                request.hasHttpHeader() && request.hasHttpPayload() && request.httpPayload.hasMessage() -> SEND_QUEUE_ATTRIBUTE
+                request.hasHttpHeader() && request.hasHttpPayload() && request.httpPayload.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
                 else -> error(
                     "Unsupported combination " +
                             "http header (${if (request.hasHttpHeader()) "exist" else "empty"}) and " +
-                            "http body (${if (request.hasHttpBody()) request.httpBody.kindCase else "empty"})"
+                            "http body (${if (request.hasHttpPayload()) request.httpPayload.kindCase else "empty"})"
                 )
             }
             val messages = mutableListOf<Message.Builder<*>>()
@@ -106,7 +106,7 @@ open class ActHandlerBase(
                 require(metadata.messageType == MSG_TYPE_HTTP_REQUEST) {
                     "Unsupported request message type '${metadata.messageType}', expected '$MSG_TYPE_HTTP_REQUEST'"
                 }
-                if (request.hasHttpBody() && request.httpBody.hasMessage()) {
+                if (request.hasHttpPayload() && request.httpPayload.hasMessage()) {
                     require(metadata.protocol.isNotBlank()) {
                         "Http header message protocol must not be blank"
                     }
@@ -115,14 +115,14 @@ open class ActHandlerBase(
                 sessionGroup = metadata.id.connectionId.sessionGroup
                 messages.add(request.httpHeader.toTransportBuilder())
             }
-            if (request.hasHttpBody()) {
-                val httpBody = request.httpBody
-                httpBody.sessionAlias?.let { sessionAlias = it }
-                httpBody.sessionGroup?.let { sessionGroup = it }
+            if (request.hasHttpPayload()) {
+                val httpPayload = request.httpPayload
+                httpPayload.sessionAlias?.let { sessionAlias = it }
+                httpPayload.sessionGroup?.let { sessionGroup = it }
                 when {
-                    httpBody.hasMessage() -> messages.add(httpBody.message.toTransportBuilder())
-                    httpBody.hasRawMessage() -> messages.add(httpBody.rawMessage.toTransportBuilder())
-                    else -> error("Unsupported message kind: ${httpBody.kindCase}")
+                    httpPayload.hasMessage() -> messages.add(httpPayload.message.toTransportBuilder())
+                    httpPayload.hasRawMessage() -> messages.add(httpPayload.rawMessage.toTransportBuilder())
+                    else -> error("Unsupported message kind: ${httpPayload.kindCase}")
                 }
             }
 
@@ -210,7 +210,7 @@ open class ActHandlerBase(
                 if (messages.isNotEmpty()) {
                     httpHeader = messages[0].protoMessage
                     if (messages.size > 1) {
-                        httpBody = messages[1].protoMessage
+                        httpPayload = messages[1].protoMessage
                     }
                 }
                 checkpointId = checkpoint

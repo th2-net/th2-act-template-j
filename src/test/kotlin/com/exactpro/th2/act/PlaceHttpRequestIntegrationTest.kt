@@ -66,7 +66,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val request = request(
             eventId = eventId,
             description = "place HTTP request no response test",
-            httpBody = protoMessage(
+            httpPayload = protoMessage(
                 id = messageId,
                 type = TYPE_REQUEST,
             ).toAnyMessage()
@@ -127,7 +127,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             }
             get { this.checkpointId } isEqualTo Checkpoint.getDefaultInstance()
             get { this.httpHeader } isEqualTo Message.getDefaultInstance()
-            get { this.httpBody } isEqualTo Message.getDefaultInstance()
+            get { this.httpPayload } isEqualTo Message.getDefaultInstance()
         }
         env.asserQueues()
     }
@@ -145,7 +145,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val request = request(
             eventId = eventId,
             description = "place HTTP request with ok status code",
-            httpBody = protoMessage(
+            httpPayload = protoMessage(
                 id = messageIdOut,
                 type = TYPE_REQUEST,
             ).toAnyMessage()
@@ -243,7 +243,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val request = request(
             eventId = eventId,
             description = "place HTTP request with bad status code",
-            httpBody = protoMessage(
+            httpPayload = protoMessage(
                 id = messageIdOut,
                 type = TYPE_REQUEST,
             ).toAnyMessage()
@@ -395,7 +395,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val request = request(
             eventId = eventId,
             description = "place HTTP request valid",
-            httpBody = protoMessage(
+            httpPayload = protoMessage(
                 id = messageId,
                 type = "my-type",
             ).toAnyMessage()
@@ -447,7 +447,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val request = request(
             eventId = eventId,
             description = "place HTTP request valid",
-            httpBody = protoRaw(
+            httpPayload = protoRaw(
                 id = messageId,
                 payload = """{"test-field":"test-value"}""".toByteArray()
             ).toAnyMessage()
@@ -467,11 +467,11 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 get { this.scope } isEqualTo env.scope
             }
             isA<RawMessage>() and {
-                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpBody.rawMessage.body.asReadOnlyByteBuffer())
+                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpPayload.rawMessage.body.asReadOnlyByteBuffer())
             }
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
-            get { this.name } isEqualTo "Send '[raw(${request.httpBody.rawMessage.body.size()}B)]' messages to connectivity"
+            get { this.name } isEqualTo "Send '[raw(${request.httpPayload.rawMessage.body.size()}B)]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
@@ -505,7 +505,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 type = TYPE_REQUEST,
                 protocol = "http"
             ),
-            httpBody = protoMessage(
+            httpPayload = protoMessage(
                 id = messageId,
                 type = "my-type",
             ).toAnyMessage()
@@ -571,7 +571,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 id = messageId,
                 type = TYPE_REQUEST,
             ),
-            httpBody = protoRaw(
+            httpPayload = protoRaw(
                 id = messageId,
                 payload = """{"test-field":"test-value"}""".toByteArray()
             ).toAnyMessage()
@@ -602,11 +602,11 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
                 get { this.scope } isEqualTo env.scope
             }
             isA<RawMessage>() and {
-                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpBody.rawMessage.body.asReadOnlyByteBuffer())
+                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpPayload.rawMessage.body.asReadOnlyByteBuffer())
             }
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
-            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST),raw(${request.httpBody.rawMessage.body.size()}B)]' messages to connectivity"
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST),raw(${request.httpPayload.rawMessage.body.size()}B)]' messages to connectivity"
             get { this.type } isEqualTo "Outgoing message"
         }
         expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
@@ -633,13 +633,13 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             eventId: EventID,
             description: String = "test-description",
             httpHeader: Message? = null,
-            httpBody: AnyMessage? = null,
+            httpPayload: AnyMessage? = null,
         ): PlaceHttpRequest = PlaceHttpRequest.newBuilder()
             .setDescription(description)
             .setParentEventId(eventId)
             .apply {
                 httpHeader?.let(::setHttpHeader)
-                httpBody?.let(::setHttpBody)
+                httpPayload?.let(::setHttpPayload)
             }.build()
     }
 }
