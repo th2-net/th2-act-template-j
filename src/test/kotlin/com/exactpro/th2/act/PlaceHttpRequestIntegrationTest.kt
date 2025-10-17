@@ -21,15 +21,15 @@ import com.exactpro.th2.act.integration.ActIntegrationTest
 import com.exactpro.th2.act.integration.ProtoDirection
 import com.exactpro.th2.act.integration.TransportDirection
 import com.exactpro.th2.common.annotations.IntegrationTest
+import com.exactpro.th2.common.grpc.AnyMessage
 import com.exactpro.th2.common.grpc.Checkpoint
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus
 import com.exactpro.th2.common.grpc.Message
-import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.grpc.RequestStatus
-import com.exactpro.th2.common.message.addField
-import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage
 import com.exactpro.th2.common.utils.event.toTransport
 import com.exactpro.th2.common.utils.message.toTransport
 import com.exactpro.th2.common.utils.message.transport.toProto
@@ -38,8 +38,10 @@ import com.exactpro.th2.test.annotations.Th2AppFactory
 import com.exactpro.th2.test.annotations.Th2IntegrationTest
 import com.exactpro.th2.test.annotations.Th2TestFactory
 import com.exactpro.th2.test.extension.CleanupExtension
+import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
+import strikt.assertions.isA
 import strikt.assertions.isEmpty
 import strikt.assertions.isEqualTo
 import strikt.assertions.isNotEqualTo
@@ -63,9 +65,11 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val messageId = env.createMessageId(ProtoDirection.SECOND)
         val request = request(
             eventId = eventId,
-            id = messageId,
-            description = "place HTTP request valid",
-            type = TYPE_REQUEST,
+            description = "place HTTP request no response test",
+            httpBody = protoMessage(
+                id = messageId,
+                type = TYPE_REQUEST,
+            ).toAnyMessage()
         )
 
         val response = env.callAct { placeHttpRequest(request, it) }
@@ -81,7 +85,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
             get { this.type } isEqualTo "placeHttpRequest"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"data":"place HTTP request valid","type":"message"}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"data":"${request.description}","type":"message"}]"""
         }
         expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isEqualTo messageId.toTransport()
@@ -139,10 +143,12 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val eventId = env.createEvent()
         val messageIdOut = env.createMessageId(ProtoDirection.SECOND)
         val request = request(
-            id = messageIdOut,
             eventId = eventId,
-            description = "place HTTP request valid",
-            type = TYPE_REQUEST,
+            description = "place HTTP request with ok status code",
+            httpBody = protoMessage(
+                id = messageIdOut,
+                type = TYPE_REQUEST,
+            ).toAnyMessage()
         )
 
         val response = env.callAct { placeHttpRequest(request, it) }
@@ -158,7 +164,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
             get { this.type } isEqualTo "placeHttpRequest"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"data":"place HTTP request valid","type":"message"}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"data":"${request.description}","type":"message"}]"""
         }
         expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isEqualTo messageIdOut.toTransport()
@@ -170,7 +176,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.body }.isEmpty()
         }
 
-        val erMessage = message(
+        val erMessage = transportMessage(
             id = env.createMessageId(TransportDirection.INCOMING),
             eventId = actEvent.id.toTransport(),
             type = TYPE_RESPONSE,
@@ -235,10 +241,12 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         val eventId = env.createEvent()
         val messageIdOut = env.createMessageId(ProtoDirection.SECOND)
         val request = request(
-            id = messageIdOut,
             eventId = eventId,
-            description = "place HTTP request valid",
-            type = TYPE_REQUEST,
+            description = "place HTTP request with bad status code",
+            httpBody = protoMessage(
+                id = messageIdOut,
+                type = TYPE_REQUEST,
+            ).toAnyMessage()
         )
 
         val response = env.callAct { placeHttpRequest(request, it) }
@@ -254,7 +262,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
             get { this.type } isEqualTo "placeHttpRequest"
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"data":"place HTTP request valid","type":"message"}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"data":"${request.description}","type":"message"}]"""
         }
         expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
             get { this.id } isEqualTo messageIdOut.toTransport()
@@ -266,7 +274,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.body }.isEmpty()
         }
 
-        val erMessage = message(
+        val erMessage = transportMessage(
             id = env.createMessageId(TransportDirection.INCOMING),
             eventId = actEvent.id.toTransport(),
             type = TYPE_RESPONSE,
@@ -320,6 +328,300 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         env.asserQueues()
     }
 
+    @Test
+    fun `place HTTP request send header only`(
+        @Th2AppFactory factory: CommonFactory,
+        @Th2TestFactory test: CommonFactory,
+        resourceCleaner: CleanupExtension.Registry,
+    ) {
+        val env = prepareEnv(factory, test, resourceCleaner)
+
+        val eventId = env.createEvent()
+        val messageId = env.createMessageId(ProtoDirection.SECOND)
+        val request = request(
+            eventId = eventId,
+            description = "place HTTP request valid",
+            httpHeader = protoMessage(
+                id = messageId,
+                type = TYPE_REQUEST,
+            )
+        )
+
+        val response = env.callAct { placeHttpRequest(request, it) }
+
+        val actEvent = assertNotNull(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS))
+        expectThat(actEvent) and {
+            get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
+            get { this.type } isEqualTo "placeHttpRequest"
+        }
+        expectThat(env.sendHttpMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            isA<ParsedMessage>() and {
+                get { this.type } isEqualTo TYPE_REQUEST
+                get { this.body }.isEmpty()
+            }
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST)]' messages to connectivity"
+            get { this.type } isEqualTo "Outgoing message"
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Internal placeHttpRequest error"
+            get { this.type } isEqualTo "No response found by target keys."
+        }
+        expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
+            get { this.status } and {
+                get { this.status } isEqualTo RequestStatus.Status.ERROR
+                get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
+            }
+        }
+        env.asserQueues()
+    }
+
+    @Test
+    fun `place HTTP request send parsed body only`(
+        @Th2AppFactory factory: CommonFactory,
+        @Th2TestFactory test: CommonFactory,
+        resourceCleaner: CleanupExtension.Registry,
+    ) {
+        val env = prepareEnv(factory, test, resourceCleaner)
+
+        val eventId = env.createEvent()
+        val messageId = env.createMessageId(ProtoDirection.SECOND)
+        val request = request(
+            eventId = eventId,
+            description = "place HTTP request valid",
+            httpBody = protoMessage(
+                id = messageId,
+                type = "my-type",
+            ).toAnyMessage()
+        )
+
+        val response = env.callAct { placeHttpRequest(request, it) }
+
+        val actEvent = assertNotNull(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS))
+        expectThat(actEvent) and {
+            get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
+            get { this.type } isEqualTo "placeHttpRequest"
+        }
+        expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            get { this.type } isEqualTo "my-type"
+            get { this.body }.isEmpty()
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Send '[parsed(my-type)]' messages to connectivity"
+            get { this.type } isEqualTo "Outgoing message"
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Internal placeHttpRequest error"
+            get { this.type } isEqualTo "No response found by target keys."
+        }
+        expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
+            get { this.status } and {
+                get { this.status } isEqualTo RequestStatus.Status.ERROR
+                get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
+            }
+        }
+        env.asserQueues()
+    }
+
+    @Test
+    fun `place HTTP request send raw body only`(
+        @Th2AppFactory factory: CommonFactory,
+        @Th2TestFactory test: CommonFactory,
+        resourceCleaner: CleanupExtension.Registry,
+    ) {
+        val env = prepareEnv(factory, test, resourceCleaner)
+
+        val eventId = env.createEvent()
+        val messageId = env.createMessageId(ProtoDirection.SECOND)
+        val request = request(
+            eventId = eventId,
+            description = "place HTTP request valid",
+            httpBody = protoRaw(
+                id = messageId,
+                payload = """{"test-field":"test-value"}""".toByteArray()
+            ).toAnyMessage()
+        )
+
+        val response = env.callAct { placeHttpRequest(request, it) }
+
+        val actEvent = assertNotNull(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS))
+        expectThat(actEvent) and {
+            get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
+            get { this.type } isEqualTo "placeHttpRequest"
+        }
+        expectThat(env.sendHttpMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            isA<RawMessage>() and {
+                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpBody.rawMessage.body.asReadOnlyByteBuffer())
+            }
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Send '[raw(${request.httpBody.rawMessage.body.size()}B)]' messages to connectivity"
+            get { this.type } isEqualTo "Outgoing message"
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Internal placeHttpRequest error"
+            get { this.type } isEqualTo "No response found by target keys."
+        }
+        expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
+            get { this.status } and {
+                get { this.status } isEqualTo RequestStatus.Status.ERROR
+                get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
+            }
+        }
+        env.asserQueues()
+    }
+
+    @Test
+    fun `place HTTP request send header and parsed body`(
+        @Th2AppFactory factory: CommonFactory,
+        @Th2TestFactory test: CommonFactory,
+        resourceCleaner: CleanupExtension.Registry,
+    ) {
+        val env = prepareEnv(factory, test, resourceCleaner)
+
+        val eventId = env.createEvent()
+        val messageId = env.createMessageId(ProtoDirection.SECOND)
+        val request = request(
+            eventId = eventId,
+            description = "place HTTP request valid",
+            httpHeader = protoMessage(
+                id = messageId,
+                type = TYPE_REQUEST,
+                protocol = "http"
+            ),
+            httpBody = protoMessage(
+                id = messageId,
+                type = "my-type",
+            ).toAnyMessage()
+        )
+
+        val response = env.callAct { placeHttpRequest(request, it) }
+
+        val actEvent = assertNotNull(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS))
+        expectThat(actEvent) and {
+            get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
+            get { this.type } isEqualTo "placeHttpRequest"
+        }
+        expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            get { this.protocol } isEqualTo "http"
+            get { this.type } isEqualTo TYPE_REQUEST
+            get { this.body }.isEmpty()
+        }
+        expectThat(env.sendMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            get { this.type } isEqualTo "my-type"
+            get { this.body }.isEmpty()
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST),parsed(my-type)]' messages to connectivity"
+            get { this.type } isEqualTo "Outgoing message"
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Internal placeHttpRequest error"
+            get { this.type } isEqualTo "No response found by target keys."
+        }
+        expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
+            get { this.status } and {
+                get { this.status } isEqualTo RequestStatus.Status.ERROR
+                get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
+            }
+        }
+        env.asserQueues()
+    }
+
+    @Test
+    fun `place HTTP request send header and raw body`(
+        @Th2AppFactory factory: CommonFactory,
+        @Th2TestFactory test: CommonFactory,
+        resourceCleaner: CleanupExtension.Registry,
+    ) {
+        val env = prepareEnv(factory, test, resourceCleaner)
+
+        val eventId = env.createEvent()
+        val messageId = env.createMessageId(ProtoDirection.SECOND)
+        val request = request(
+            eventId = eventId,
+            description = "place HTTP request valid",
+            httpHeader = protoMessage(
+                id = messageId,
+                type = TYPE_REQUEST,
+            ),
+            httpBody = protoRaw(
+                id = messageId,
+                payload = """{"test-field":"test-value"}""".toByteArray()
+            ).toAnyMessage()
+        )
+
+        val response = env.callAct { placeHttpRequest(request, it) }
+
+        val actEvent = assertNotNull(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS))
+        expectThat(actEvent) and {
+            get { this.name } isEqualTo "placeHttpRequest $SESSION_ALIAS - ${request.description}"
+            get { this.type } isEqualTo "placeHttpRequest"
+        }
+        expectThat(env.sendHttpMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            isA<ParsedMessage>() and {
+                get { this.type } isEqualTo TYPE_REQUEST
+                get { this.body }.isEmpty()
+            }
+        }
+        expectThat(env.sendHttpMessages.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.id } isEqualTo messageId.toTransport()
+            get { this.eventId }.isNotNull() and {
+                get { this.book } isEqualTo env.book
+                get { this.scope } isEqualTo env.scope
+            }
+            isA<RawMessage>() and {
+                get { this.body } isEqualTo Unpooled.wrappedBuffer(request.httpBody.rawMessage.body.asReadOnlyByteBuffer())
+            }
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Send '[parsed($TYPE_REQUEST),raw(${request.httpBody.rawMessage.body.size()}B)]' messages to connectivity"
+            get { this.type } isEqualTo "Outgoing message"
+        }
+        expectThat(env.events.poll(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)).isNotNull() and {
+            get { this.name } isEqualTo "Internal placeHttpRequest error"
+            get { this.type } isEqualTo "No response found by target keys."
+        }
+        expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
+            get { this.status } and {
+                get { this.status } isEqualTo RequestStatus.Status.ERROR
+                get { this.message } isEqualTo "No response message has been received in '$OPT_RESPONSE_TIMEOUT' ms"
+            }
+        }
+        env.asserQueues()
+    }
+
     companion object {
         private const val TYPE_REQUEST = "Request"
         private const val TYPE_RESPONSE = "Response"
@@ -328,24 +630,16 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
         private const val FIELD_STATUS_CODE = "statusCode"
 
         private fun request(
-            id: MessageID,
             eventId: EventID,
             description: String = "test-description",
-            type: String = TYPE_REQUEST,
-            payloadBody: Map<String, Any> = emptyMap(),
+            httpHeader: Message? = null,
+            httpBody: AnyMessage? = null,
         ): PlaceHttpRequest = PlaceHttpRequest.newBuilder()
             .setDescription(description)
             .setParentEventId(eventId)
             .apply {
-                httpBodyBuilder.apply {
-                    messageBuilder.apply {
-                        messageType = type
-                        metadataBuilder.id = id
-                        payloadBody.forEach { (key, value) ->
-                            addField(key, value.toValue())
-                        }
-                    }
-                }
+                httpHeader?.let(::setHttpHeader)
+                httpBody?.let(::setHttpBody)
             }.build()
     }
 }

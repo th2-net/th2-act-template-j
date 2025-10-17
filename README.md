@@ -1,4 +1,4 @@
-# th2 act template (5.3.0)
+# th2 act template (5.4.0)
 
 ## Overview
 
@@ -25,6 +25,31 @@ For that you need to:
 1. Send rpc request using `SendRawMessageRequest` and `sendRawMessage` rpc that is defined in [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
 2. Transport group with `RawMessage` will be published to pins with `send_raw` attribute.
 
+### Placing http messages
+It is also possible to place messages for [th2-conn-http-client](https://github.com/th2-net/th2-conn-http-client). This rpc call sends request with `act` event id and waits response with the same event id. After receiving response, `act` check `statusCode` field to calculate rpc response status. 
+For that you need to send rpc request using `PlaceHttpRequest` and `placeHttpRequest` rpc that is defined in [th2-grpc-act-template](https://github.com/th2-net/th2-grpc-act-template/blob/master/src/main/proto/th2_grpc_act_template/act_template.proto "act_template.proto")
+`placeHttpRequest` rpc supports the scenarios:
+1. place header only:
+   * requirements: `PlaceHttpRequest.httpHeader.messageType` must have `Request` value.
+   * schema: act =[parsed]=> conn-http
+   * pin attributes: [`transport-group`, `send_http`]
+2. place parsed body only:
+   * schema: act =[parsed]=> codec-* =[raw]=> conn-http
+   * pin attributes: [`transport-group`, `send`]
+3. place raw body only:
+   * schema: act =[raw]=> conn-http
+   * pin attributes: [`transport-group`, `send_http`]
+4. place header and parsed body:
+   * requirements: 
+     * `PlaceHttpRequest.httpHeader.messageType` must have `Request` value.
+     * `PlaceHttpRequest.httpHeader.metadata.protocol` must not be blank to avoid `codec-*` encoding).
+   * schema: act =[parsed,parsed]=> codec-* =[parsed,raw]=> conn-http
+   * pin attributes: [`transport-group`, `send`]
+5. place header and raw body:
+   * requirements: `PlaceHttpRequest.httpHeader.messageType` must have `Request` value.
+   * schema: act =[parsed,raw]=> conn-http
+   * pin attributes: [`transport-group`, `send_http`]
+
 ## Custom resources for infra-mgr
 
 ```yaml
@@ -47,6 +72,13 @@ spec:
                 - fieldName: "session_alias"
                   expectedValue: "*-fix-*"
                   operation: WILDCARD
+        - name: to_codec_json
+          attributes: [publish, transport-group, send]
+          filters:
+            - metadata:
+                - fieldName: "session_alias"
+                  expectedValue: "*-http-*"
+                  operation: WILDCARD
 
         - name: to_conn_client_fix
           attributes: [publish, transport-group, send_raw]
@@ -54,6 +86,13 @@ spec:
             - metadata:
                 - fieldName: "session_alias"
                   expectedValue: "client-fix-*"
+                  operation: WILDCARD
+        - name: to_conn_client_http
+          attributes: [publish, transport-group, send_http]
+          filters:
+            - metadata:
+                - fieldName: "session_alias"
+                  expectedValue: "client-http-*"
                   operation: WILDCARD
       subscribers:
         - name: from_codec
@@ -83,7 +122,7 @@ the `protobuf-description-base64` label. Such descriptors can be used to interac
 
 ## Release Notes
 
-### next
+### 5.4.0
 
 + [[GH-130] `placeHttpRequest` method implemented](https://github.com/th2-net/th2-act-template-j/issues/130)
 + Provided `response-timeout` option

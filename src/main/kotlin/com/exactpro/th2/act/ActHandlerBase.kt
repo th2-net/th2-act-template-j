@@ -88,6 +88,18 @@ open class ActHandlerBase(
             }
             var sessionAlias = ""
             var sessionGroup = ""
+            val pinAttribute = when {
+                request.hasHttpHeader() && !request.hasHttpBody() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                !request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasMessage() -> SEND_QUEUE_ATTRIBUTE
+                !request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasMessage() -> SEND_QUEUE_ATTRIBUTE
+                request.hasHttpHeader() && request.hasHttpBody() && request.httpBody.hasRawMessage() -> SEND_HTTP_QUEUE_ATTRIBUTE
+                else -> error(
+                    "Unsupported combination " +
+                            "http header (${if (request.hasHttpHeader()) "exist" else "empty"}) and " +
+                            "http body (${if (request.hasHttpBody()) request.httpBody.kindCase else "empty"})"
+                )
+            }
             val messages = mutableListOf<Message.Builder<*>>()
             if (request.hasHttpHeader()) {
                 val metadata = request.httpHeader.metadata
@@ -117,7 +129,7 @@ open class ActHandlerBase(
             val rootEventId = rootEvent(start, actName, sessionAlias, request.description, request.parentEventId).id
             val checkpoint = registerCheckPoint(rootEventId)
 
-            sendMessages(rootEventId, messages, sessionGroup)
+            sendMessages(rootEventId, messages, sessionGroup, pinAttribute)
 
             AwaitGroupContext(setOf(INCOMING)) { group ->
                 if (group.eventId == rootEventId) {
@@ -128,7 +140,7 @@ open class ActHandlerBase(
                 context.await(timeout)?.let { result ->
                     val results = result.asSequence().filterNotNull().toList()
 
-                    val status = if (results.first().getSimple("statusCode") == "200") PASSED else FAILED
+                    val status = if (results.first().getSimple(STATUS_CODE_HTTP_FIELD) == "200") PASSED else FAILED
                     Event.start()
                         .name("Received '${results.map(MessageHolder::messageType)}' response messages")
                         .type("messages")
@@ -141,7 +153,7 @@ open class ActHandlerBase(
                 } ?: run {
                     val bodyData = treeTable {
                         collection("PASSED on:") {
-                            rowColumn("statusCode", 200)
+                            rowColumn(STATUS_CODE_HTTP_FIELD, 200)
                         }
                     }
                     noResponseEvent(start, actName, rootEventId, bodyData, context.messageIds)
@@ -327,7 +339,12 @@ open class ActHandlerBase(
     }
 
     @Throws(IOException::class)
-    protected fun sendMessages(eventId: EventID, messages: List<Message.Builder<*>>, sessionGroup: String) {
+    protected fun sendMessages(
+        eventId: EventID,
+        messages: List<Message.Builder<*>>,
+        sessionGroup: String,
+        pinAttribute: String
+    ) {
         catching {
             require(messages.isNotEmpty()) { "Message list can't be empty" }
 
@@ -335,7 +352,7 @@ open class ActHandlerBase(
             messages.map { it.setEventId(transportEventId).build() }.apply {
                 messageRouter.send(
                     MessageGroup(this).toBatch(eventId.bookName, sessionGroup),
-                    SEND_QUEUE_ATTRIBUTE
+                    pinAttribute
                 )
             }
         }.getOrElse {
@@ -458,6 +475,9 @@ open class ActHandlerBase(
     companion object {
         protected const val SEND_RAW_QUEUE_ATTRIBUTE: String = "send_raw"
         protected const val SEND_QUEUE_ATTRIBUTE: String = "send"
+        protected const val SEND_HTTP_QUEUE_ATTRIBUTE: String = "send_http"
+
+        private const val STATUS_CODE_HTTP_FIELD = "statusCode"
 
         private const val MSG_TYPE_HTTP_REQUEST = "Request"
 
