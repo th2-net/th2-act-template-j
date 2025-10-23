@@ -10,15 +10,6 @@ version = release_version
 repositories {
     mavenCentral()
     mavenLocal()
-    maven { // FIXME: remove after test
-        name 'Sonatype_snapshot '
-        url 'https://central.sonatype.com/repository/maven-snapshots/'
-    }
-
-    configurations.configureEach {
-        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-    }
 }
 
 dependencies {
