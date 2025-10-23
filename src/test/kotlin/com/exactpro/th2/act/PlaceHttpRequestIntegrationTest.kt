@@ -47,6 +47,7 @@ import strikt.assertions.isEqualTo
 import strikt.assertions.isNotEqualTo
 import strikt.assertions.isNotNull
 import java.util.concurrent.TimeUnit.MILLISECONDS
+import kotlin.random.Random
 import kotlin.test.assertNotNull
 
 @IntegrationTest
@@ -118,7 +119,7 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
             get { this.name } isEqualTo "Internal placeHttpRequest error"
             get { this.type } isEqualTo "No response found by target keys."
             get { this.attachedMessageIdsList }.isEmpty()
-            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"PASSED on:":{"type":"collection","rows":{"statusCode":{"type":"row","columns":{"fieldValue":"200"}}}}}}]"""
+            get { this.body.toStringUtf8() } isEqualTo """[{"type":"treeTable","rows":{"FAILED on:":{"type":"collection","rows":{"statusCode":{"type":"row","columns":{"fieldValue":"is null or in range [400 .. 599]"}}}}}}]"""
         }
         expectThat(response.get(OPT_RESPONSE_TIMEOUT * 3, MILLISECONDS)) and {
             get { this.status } and {
@@ -625,9 +626,10 @@ class PlaceHttpRequestIntegrationTest : ActIntegrationTest() {
     companion object {
         private const val TYPE_REQUEST = "Request"
         private const val TYPE_RESPONSE = "Response"
-        private const val HTTP_CODE_OK = "200"
-        private const val HTTP_CODE_BAD = "404"
         private const val FIELD_STATUS_CODE = "statusCode"
+
+        private val HTTP_CODE_OK = Random.nextInt(100, 400).toString()
+        private val HTTP_CODE_BAD = Random.nextInt(400, 600).toString()
 
         private fun request(
             eventId: EventID,

@@ -140,7 +140,8 @@ open class ActHandlerBase(
                 context.await(timeout)?.let { result ->
                     val results = result.asSequence().filterNotNull().toList()
 
-                    val status = if (results.first().getSimple(STATUS_CODE_HTTP_FIELD) == "200") PASSED else FAILED
+                    val statusCode = results.first().getSimple(STATUS_CODE_HTTP_FIELD)?.toIntOrNull()
+                    val status = if (statusCode == null || statusCode in (400.. 599)) FAILED else PASSED
                     Event.start()
                         .name("Received '${results.map(MessageHolder::messageType)}' response messages")
                         .type("messages")
@@ -152,8 +153,8 @@ open class ActHandlerBase(
                     response.messageResponse(results, checkpoint, status.toResponseStatus())
                 } ?: run {
                     val bodyData = treeTable {
-                        collection("PASSED on:") {
-                            rowColumn(STATUS_CODE_HTTP_FIELD, 200)
+                        collection("FAILED on:") {
+                            rowColumn(STATUS_CODE_HTTP_FIELD, "is null or in range [400 .. 599]")
                         }
                     }
                     noResponseEvent(start, actName, rootEventId, bodyData, context.messageIds)
