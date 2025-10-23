@@ -170,7 +170,7 @@ class PlaceOrderFixIntegrationTest : ActIntegrationTest() {
             }
         }
 
-        val erMessage = message(
+        val erMessage = transportMessage(
             id = env.createMessageId(TransportDirection.INCOMING),
             type = TYPE_EXECUTION_REPORT,
             body = mapOf(FIELD_CL_ORD_ID to CL_ORD_ID),
@@ -268,7 +268,7 @@ class PlaceOrderFixIntegrationTest : ActIntegrationTest() {
             }
         }
 
-        val erMessage = message(
+        val erMessage = transportMessage(
             id = env.createMessageId(TransportDirection.INCOMING),
             type = TYPE_BUSINESS_MESSAGE_REJECT,
             body = mapOf(FIELD_BUSINESS_REJECT_REF_ID to CL_ORD_ID),

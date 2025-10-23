@@ -26,6 +26,7 @@ import com.exactpro.th2.common.grpc.Event
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.MessageID
 import com.exactpro.th2.common.schema.factory.CommonFactory
+import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.Message
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.MessageId
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.RawMessage
@@ -56,6 +57,7 @@ class TestActEnvironment(
     private val act: AsyncActService = factory.grpcRouter.getService(AsyncActService::class.java)
     val sendMessages = ArrayBlockingQueue<ParsedMessage>(queueSize)
     val sendRawMessages = ArrayBlockingQueue<RawMessage>(queueSize)
+    val sendHttpMessages = ArrayBlockingQueue<Message<*>>(queueSize)
     val events = ArrayBlockingQueue<Event>(queueSize)
 
     private val router = factory.transportGroupBatchRouter
@@ -82,6 +84,11 @@ class TestActEnvironment(
                     sendRawMessages.put(it)
                 }
         }, "send_raw").also { resourceCleaner.add(it::unsubscribe) }
+        router.subscribe({ _, batch ->
+            batch.groups.asSequence()
+                .flatMap { it.messages.asSequence() }
+                .forEach(sendHttpMessages::put)
+        }, "send_http").also { resourceCleaner.add(it::unsubscribe) }
         factory.eventBatchRouter.subscribe({ _, batch ->
             batch.eventsList.asSequence().forEach(events::put)
         }).also { resourceCleaner.add(it::unsubscribe) }
@@ -126,6 +133,12 @@ class TestActEnvironment(
                 assertTrue(
                     sendRawMessages.isEmpty(),
                     "act sent unchecked message to a pin 'send_raw'  attribute"
+                )
+            },
+            {
+                assertTrue(
+                    sendHttpMessages.isEmpty(),
+                    "act sent unchecked message to a pin 'send_http'  attribute"
                 )
             },
             { assertTrue(events.isEmpty(), "act sent unchecked event to a pin 'event' attribute") },

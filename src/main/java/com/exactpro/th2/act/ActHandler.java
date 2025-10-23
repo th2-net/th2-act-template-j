@@ -16,7 +16,6 @@
 
 package com.exactpro.th2.act;
 
-import com.exactpro.th2.act.grpc.ActGrpc.ActImplBase;
 import com.exactpro.th2.act.grpc.PlaceMessageRequest;
 import com.exactpro.th2.act.grpc.MultiSendRequest;
 import com.exactpro.th2.act.grpc.PlaceMessageRequestOrBuilder;
@@ -27,8 +26,6 @@ import com.exactpro.th2.act.grpc.SendRawMessageResponse;
 import com.exactpro.th2.act.impl.MessageResponseMonitor;
 import com.exactpro.th2.act.rules.FieldCheckRule;
 import com.exactpro.th2.check1.grpc.Check1Service;
-import com.exactpro.th2.check1.grpc.CheckpointRequest;
-import com.exactpro.th2.check1.grpc.CheckpointResponse;
 import com.exactpro.th2.common.event.Event;
 import com.exactpro.th2.common.event.Event.Status;
 import com.exactpro.th2.common.event.EventUtils;
@@ -53,16 +50,12 @@ import com.exactpro.th2.common.grpc.RequestStatus;
 import com.exactpro.th2.common.grpc.Value;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.GroupBatch;
-import com.exactpro.th2.common.schema.message.impl.rabbitmq.transport.ParsedMessage;
 import com.exactpro.th2.common.utils.event.EventUtilsKt;
 import com.exactpro.th2.common.utils.message.MessageHolder;
 import com.exactpro.th2.common.utils.message.MessageTableColumn;
 import com.exactpro.th2.common.utils.message.MessageUtilsKt;
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.JsonFormat;
 import io.grpc.Context;
-import io.grpc.Deadline;
 import io.grpc.stub.StreamObserver;
 import io.netty.buffer.ByteBufUtil;
 import org.slf4j.Logger;
@@ -90,7 +83,6 @@ import static com.exactpro.th2.common.utils.message.MessageHolderUtilsKt.getTree
 import static com.exactpro.th2.common.utils.message.MessageUtilsKt.toTransport;
 import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toBatch;
 import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toGroup;
-import static com.exactpro.th2.common.utils.message.transport.MessageUtilsKt.toTreeTable;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.lang.String.format;
 import static java.time.Instant.ofEpochMilli;
@@ -98,37 +90,16 @@ import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
-public class ActHandler extends ActImplBase {
-    private static final String SEND_RAW_QUEUE_ATTRIBUTE = "send_raw";
-    private static final String SEND_QUEUE_ATTRIBUTE = "send";
+public class ActHandler extends ActHandlerBase {
     private static final Logger LOGGER = LoggerFactory.getLogger(ActHandler.class);
 
-    @Nullable
-    private final Check1Service check1Service;
-    private final MessageRouter<EventBatch> eventBatchMessageRouter;
-    private final MessageRouter<GroupBatch> messageRouter;
-    private final SubscriptionManager subscriptionManager;
-    private final int responseTimeout;
-
     ActHandler(
-            MessageRouter<GroupBatch> router,
+            MessageRouter<GroupBatch> messageRouter,
             SubscriptionManager subscriptionManager,
-            MessageRouter<EventBatch> eventBatchRouter,
+            MessageRouter<EventBatch> eventRouter,
             @Nullable Check1Service check1Service,
             int responseTimeout) {
-        this.messageRouter = requireNonNull(router, "'Router' parameter");
-        this.eventBatchMessageRouter = requireNonNull(eventBatchRouter, "'Event batch router' parameter");
-        this.check1Service = check1Service;
-        this.subscriptionManager = requireNonNull(subscriptionManager, "'Callback list' parameter");
-        this.responseTimeout = responseTimeout;
-    }
-
-    private long getTimeout(Deadline deadline) {
-        return deadline == null ? responseTimeout : deadline.timeRemaining(MILLISECONDS);
-    }
-
-    private static String toDebugMessage(com.google.protobuf.MessageOrBuilder messageOrBuilder) throws InvalidProtocolBufferException {
-        return JsonFormat.printer().omittingInsignificantWhitespace().print(messageOrBuilder);
+        super(messageRouter, eventRouter, subscriptionManager, check1Service, responseTimeout);
     }
 
     @Override
@@ -245,7 +216,7 @@ public class ActHandler extends ActImplBase {
             }
 
             try {
-                sendMessage(request.getMessage(), parentId);
+                sendMessage(parentId, request.getMessage());
             } catch (Exception ex) {
                 createAndStoreErrorEvent("sendMessage", ex.getMessage(), Instant.now(), parentId);
                 throw ex;
@@ -429,7 +400,7 @@ public class ActHandler extends ActImplBase {
         try (AbstractMessageReceiver messageReceiver = receiver.create(monitor, new ReceiverContext(requestConnId))) {
             if (isSendPlaceMessage(message, responseObserver, parentId)) {
                 long startAwaitSync = System.currentTimeMillis();
-                long timeout = getTimeout(Context.current().getDeadline());
+                long timeout = calculateTimeout();
                 monitor.awaitSync(timeout, MILLISECONDS);
                 LOGGER.debug("messageReceiver.awaitSync for {} in {} ms",
                         actName, System.currentTimeMillis() - startAwaitSync);
@@ -467,7 +438,7 @@ public class ActHandler extends ActImplBase {
                     Map<String, String> msgTypeToFieldName = expectedMessages.entrySet().stream()
                             .collect(toUnmodifiableMap(Entry::getKey, value -> value.getValue().getFieldName()));
                     CheckRule checkRule = new FieldCheckRule(expectedFieldValue, msgTypeToFieldName, context.getConnectionID());
-                    return new MessageReceiver(subscriptionManager, monitor, checkRule, INCOMING);
+                    return new MessageReceiver(getSubscriptionManager(), monitor, checkRule, INCOMING);
                 });
     }
 
@@ -484,7 +455,7 @@ public class ActHandler extends ActImplBase {
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
+            sendEventBatch(event.toBatchProto(request.getParentEventId()));
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -505,7 +476,7 @@ public class ActHandler extends ActImplBase {
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
+            sendEventBatch(event.toBatchProto(request.getParentEventId()));
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -525,7 +496,7 @@ public class ActHandler extends ActImplBase {
         com.exactpro.th2.common.grpc.Event protoEvent = event.toProto(request.getParentEventId());
         //FIXME process response
         try {
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(event.toProto(request.getParentEventId())).build());
+            sendEventBatch(event.toBatchProto(request.getParentEventId()));
             LOGGER.debug("createAndStoreParentEvent for {} in {} ms", actName, System.currentTimeMillis() - startTime);
             return protoEvent.getId();
         } catch (IOException e) {
@@ -550,7 +521,7 @@ public class ActHandler extends ActImplBase {
         for (MessageID msgID : messageIDList) {
             errorEvent.messageID(msgID);
         }
-        storeEvent(errorEvent.toProto(parentEventId));
+        sendEventBatch(errorEvent.toBatchProto(parentEventId));
     }
 
     private IBodyData createNoResponseBody(Map<String, CheckMetadata> expectedMessages, String fieldValue) {
@@ -592,13 +563,13 @@ public class ActHandler extends ActImplBase {
             String messageType = responseMessage.getMessageType();
             CheckMetadata checkMetadata = expectedMessages.get(messageType);
             TreeTable parametersTable = getTreeTable(responseMessage);
-            storeEvent(Event.start()
+            sendEventBatch(Event.start()
                     .name(format("Received '%s' response message", messageType))
                     .type("message")
                     .status(checkMetadata.getEventStatus())
                     .bodyData(parametersTable)
                     .messageID(responseMessage.getId())
-                    .toProto(parentEventId)
+                    .toBatchProto(parentEventId)
             );
             PlaceMessageResponse response = PlaceMessageResponse.newBuilder()
                     .setResponseMessage(responseMessage.getProtoMessage())
@@ -618,7 +589,7 @@ public class ActHandler extends ActImplBase {
         long startTime = System.currentTimeMillis();
 
         try {
-            sendMessage(message, parentEventId);
+            sendMessage(parentEventId, message);
             return true;
         } catch (IOException e) {
             LOGGER.error("Could not send message to queue", e);
@@ -626,27 +597,6 @@ public class ActHandler extends ActImplBase {
             return false;
         } finally {
             LOGGER.debug("isSendPlaceMessage in {} ms", System.currentTimeMillis() - startTime);
-        }
-    }
-
-    private void sendMessage(Message message, EventID parentEventId) throws IOException {
-        try {
-            LOGGER.debug("Sending the message started");
-            ParsedMessage parsedMessage = MessageUtilsKt.toTransportBuilder(message)
-                    .setEventId(EventUtilsKt.toTransport(parentEventId))
-                    .build();
-            //May be used in future for filtering
-            //request.getConnectionId().getSessionAlias();
-            MessageID messageID = message.getMetadata().getId();
-            messageRouter.send(toBatch(toGroup(parsedMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), SEND_QUEUE_ATTRIBUTE);
-            //TODO remove after solving issue TH2-217
-            //TODO process response
-            EventBatch eventBatch = EventBatch.newBuilder()
-                    .addEvents(createSendMessageEvent(parsedMessage, parentEventId))
-                    .build();
-            eventBatchMessageRouter.send(eventBatch);
-        } finally {
-            LOGGER.debug("Sending the message ended");
         }
     }
 
@@ -671,7 +621,7 @@ public class ActHandler extends ActImplBase {
                     .collect(Collectors.toList())
             );
 
-            messageRouter.send(batch, SEND_QUEUE_ATTRIBUTE);
+            getMessageRouter().send(batch, SEND_QUEUE_ATTRIBUTE);
         } finally {
             LOGGER.debug("Sending the message list completed");
         }
@@ -689,25 +639,15 @@ public class ActHandler extends ActImplBase {
                 .setBody(rawMessage.getBody().toByteArray())
                 .build();
             MessageID messageID = metadata.getId();
-            messageRouter.send(toBatch(toGroup(transportRawMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), SEND_RAW_QUEUE_ATTRIBUTE);
+            getMessageRouter().send(toBatch(toGroup(transportRawMessage), messageID.getBookName(), messageID.getConnectionId().getSessionGroup()), SEND_RAW_QUEUE_ATTRIBUTE);
 
             EventBatch eventBatch = EventBatch.newBuilder()
                 .addEvents(createSendRawMessageEvent(transportRawMessage, parentEventId))
                 .build();
-            eventBatchMessageRouter.send(eventBatch);
+            sendEventBatch(eventBatch);
         } finally {
             LOGGER.debug("Sending the message ended");
         }
-    }
-
-    private com.exactpro.th2.common.grpc.Event createSendMessageEvent(ParsedMessage message, EventID parentEventId) throws IOException {
-        Event event = start()
-                .name("Send '" + message.getType() + "' message to connectivity");
-        TreeTable parametersTable = toTreeTable(message);
-        event.status(Status.PASSED);
-        event.bodyData(parametersTable);
-        event.type("Outgoing message");
-        return event.toProto(parentEventId);
     }
 
     private com.exactpro.th2.common.grpc.Event createSendRawMessageEvent(RawMessage message, EventID parentEventId) throws IOException {
@@ -727,18 +667,7 @@ public class ActHandler extends ActImplBase {
                 .type("Error")
                 .status(FAILED)
                 .bodyData(new MessageBuilder().text(message).build());
-        storeEvent(errorEvent.toProto(parentEventId));
-    }
-
-    private void storeEvent(com.exactpro.th2.common.grpc.Event eventRequest) {
-        try {
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug("Try to store event: {}", toDebugMessage(eventRequest));
-            }
-            eventBatchMessageRouter.send(EventBatch.newBuilder().addEvents(eventRequest).build());
-        } catch (Exception e) {
-            LOGGER.error("Could not store event", e);
-        }
+        sendEventBatch(errorEvent.toBatchProto(parentEventId));
     }
 
     private Map<String, Object> convertMessage(MessageOrBuilder message) {
@@ -808,20 +737,6 @@ public class ActHandler extends ActImplBase {
             .build());
         responseObserver.onCompleted();
         LOGGER.debug("Error response : {}", message);
-    }
-
-    private Checkpoint registerCheckPoint(EventID parentEventId) {
-        if (check1Service == null) {
-            return Checkpoint.getDefaultInstance();
-        }
-        LOGGER.debug("Registering the checkpoint started");
-        CheckpointResponse response = check1Service.createCheckpoint(CheckpointRequest.newBuilder()
-                .setParentEventId(parentEventId)
-                .build());
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Registering the checkpoint ended. Response " + shortDebugString(response));
-        }
-        return response.getCheckpoint();
     }
 
     private static class CheckMetadata {

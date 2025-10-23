@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,8 +46,8 @@ public class BiDirectionalMessageReceiver extends AbstractMessageReceiver {
     private final Function<MessageHolder, CheckRule> incomingRuleSupplier;
 
     private final Queue<MessageHolder> incomingBuffer = new LinkedList<>();
-    private final Listener incomingListener = this::processIncomingMessages;
-    private final Listener outgoingListener = this::processOutgoingMessages;
+    private final MessageListener incomingListener = this::processIncomingMessages;
+    private final MessageListener outgoingListener = this::processOutgoingMessages;
     private final AtomicReference<CheckRule> incomingRule = new AtomicReference<>();
 
     private volatile State state = State.START;

@@ -22,9 +22,12 @@ import com.exactpro.th2.act.grpc.PlaceMessageRequest
 import com.exactpro.th2.act.setupApp
 import com.exactpro.th2.check1.grpc.Check1Service
 import com.exactpro.th2.common.annotations.IntegrationTest
+import com.exactpro.th2.common.grpc.AnyMessage
 import com.exactpro.th2.common.grpc.EventID
 import com.exactpro.th2.common.grpc.EventStatus
+import com.exactpro.th2.common.grpc.Message
 import com.exactpro.th2.common.grpc.MessageID
+import com.exactpro.th2.common.grpc.RawMessage
 import com.exactpro.th2.common.message.addField
 import com.exactpro.th2.common.message.messageType
 import com.exactpro.th2.common.schema.factory.CommonFactory
@@ -46,6 +49,7 @@ import com.exactpro.th2.test.spec.server
 import com.exactpro.th2.test.spec.subscribers
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import com.google.protobuf.UnsafeByteOperations
 import io.grpc.Context
 import io.grpc.Deadline
 import org.junit.jupiter.api.AfterAll
@@ -71,6 +75,9 @@ abstract class ActIntegrationTest {
                 }
                 pin("to_conn") {
                     attributes("transport-group", "send_raw")
+                }
+                pin("to_http_conn") {
+                    attributes("transport-group", "send_http")
                 }
             }
             subscribers {
@@ -103,38 +110,6 @@ abstract class ActIntegrationTest {
     fun `after all`() {
         EXECUTOR.shutdownGracefully()
     }
-
-    protected fun request(
-        id: MessageID,
-        eventId: EventID,
-        description: String = "test-description",
-        type: String = "NewOrderSingle",
-        body: Map<String, Any> = emptyMap(),
-    ): PlaceMessageRequest = PlaceMessageRequest.newBuilder()
-        .setDescription(description)
-        .setParentEventId(eventId)
-        .apply {
-            messageBuilder.apply {
-                messageType = type
-                metadataBuilder.id = id
-                body.forEach { (key, value) ->
-                    addField(key, value.toValue())
-                }
-            }
-        }.build()
-
-    protected fun message(
-        id: MessageId,
-        eventId: EventId? = null,
-        type: String = "ExecutionReport",
-        body: Map<String, Any> = emptyMap(),
-    ): ParsedMessage = ParsedMessage.builder()
-        .setId(id)
-        .setType(type)
-        .setBody(body)
-        .apply {
-            eventId?.let(this::setEventId)
-        }.build()
 
     companion object {
         protected const val SESSION_ALIAS = "test-session-alias"
@@ -169,8 +144,71 @@ abstract class ActIntegrationTest {
         }
 
         @JvmStatic
+        @Suppress("unused")
         protected fun <T> withDeadline(duration: Long = 1, units: TimeUnit = TimeUnit.SECONDS, block: () -> T): T =
             Context.current()
                 .withDeadline(Deadline.after(duration, units), EXECUTOR).call(block)
+
+        @JvmStatic
+        protected fun request(
+            id: MessageID,
+            eventId: EventID,
+            description: String = "test-description",
+            type: String = "NewOrderSingle",
+            body: Map<String, Any> = emptyMap(),
+        ): PlaceMessageRequest = PlaceMessageRequest.newBuilder()
+            .setDescription(description)
+            .setParentEventId(eventId)
+            .apply {
+                messageBuilder.apply {
+                    messageType = type
+                    metadataBuilder.id = id
+                    body.forEach { (key, value) ->
+                        addField(key, value.toValue())
+                    }
+                }
+            }.build()
+
+        @JvmStatic
+        protected fun transportMessage(
+            id: MessageId,
+            eventId: EventId? = null,
+            type: String = "ExecutionReport",
+            body: Map<String, Any> = emptyMap(),
+        ): ParsedMessage = ParsedMessage.builder()
+            .setId(id)
+            .setType(type)
+            .setBody(body)
+            .apply {
+                eventId?.let(this::setEventId)
+            }.build()
+
+        @JvmStatic
+        protected fun protoMessage(id: MessageID, type: String, eventId: EventID? = null, protocol: String = "", payload: Map<String, Any> = emptyMap()): Message =
+            Message.newBuilder().apply {
+                messageType = type
+                metadataBuilder.apply {
+                    this.id = id
+                    this.protocol = protocol
+                }
+                eventId?.let(::setParentEventId)
+                payload.forEach { (key, value) ->
+                    addField(key, value.toValue())
+                }
+            }.build()
+
+        @JvmStatic
+        protected fun protoRaw(id: MessageID, eventId: EventID? = null, payload: ByteArray = ByteArray(0)): RawMessage =
+            RawMessage.newBuilder().apply {
+                metadataBuilder.id = id
+                eventId?.let(::setParentEventId)
+                body = UnsafeByteOperations.unsafeWrap(payload)
+            }.build()
+
+        @JvmStatic
+        protected fun Message.toAnyMessage(): AnyMessage = AnyMessage.newBuilder().setMessage(this).build()
+
+        @JvmStatic
+        protected fun RawMessage.toAnyMessage(): AnyMessage = AnyMessage.newBuilder().setRawMessage(this).build()
     }
 }
