@@ -9,6 +9,7 @@ jobs:
       build-target: 'Docker'
       devRelease: true
       createTag: true
+      docker-multi-platform: true
       integration-test-enabled: true
       docker-username: ${{ github.actor }}
     secrets:
