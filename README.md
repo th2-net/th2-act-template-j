@@ -1,4 +1,4 @@
-# th2 act template (5.4.0)
+# th2 act template (5.4.1)
 
 ## Overview
 
@@ -121,6 +121,14 @@ generating a th2 descriptor. CI should publish the project's docker image with t
 the `protobuf-description-base64` label. Such descriptors can be used to interact with a box-raised gRPC server.
 
 ## Release Notes
+
+### 5.4.1
+
++ Produce multi-platform docker image
+  + migrated to [amazoncorretto:11-alpine-jdk](https://hub.docker.com/layers/library/amazoncorretto/11-alpine-jdk) docker image as base
++ Updated:
+  + th2 gradle plugin: `0.3.10` (bom: `4.14.2`)
+  + kotlin: `2.2.21`
 
 ### 5.4.0
 
